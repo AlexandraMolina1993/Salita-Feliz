@@ -1,0 +1,232 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* MODO CLARO (Light) */
+    --background: 0 0% 100%; /* Fondo principal: Blanco */
+    --foreground: 222.2 84% 4.9%; /* Texto principal: Negro/Gris Oscuro */
+    --card: 0 0% 100%; /* Fondo de Tarjetas: Blanco */
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.75rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    /* MODO OSCURO (Dark) */
+    --background: 222.2 84% 4.9%; /* Fondo principal: Gris muy oscuro */
+    --foreground: 210 40% 98%; /* Texto principal: Blanco/Gris claro */
+    --card: 222.2 84% 4.9%; /* Fondo de Tarjetas: Gris muy oscuro (igual que fondo para minimalismo) */
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    /* El cuerpo usa el fondo definido por la variable --background */
+    @apply bg-background text-foreground; 
+  }
+}
+
+/* ------------------------------------------------ */
+/* 🚨 CLASES PERSONALIZADAS CORREGIDAS PARA MODO OSCURO */
+/* ------------------------------------------------ */
+
+/* Modern card styles */
+.modern-card {
+  /* ANTES: Usaba bg-white y border-gray-100 (fijos). */
+  /* AHORA: Usa bg-card y border-border (variables que cambian con el tema). */
+  @apply bg-card rounded-2xl border border-border shadow-sm hover:shadow-lg transition-all duration-300;
+}
+
+.card-hover {
+  @apply hover:shadow-xl hover:-translate-y-1 transition-all duration-300;
+}
+
+/* Loading Shimmer - Corregido para verse oscuro en modo oscuro */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .loading-shimmer {
+    /* Colores oscuros para el efecto de carga en modo oscuro */
+    background: linear-gradient(90deg, #1f2937 25%, #111827 50%, #1f2937 75%);
+    background-size: 200px 100%;
+}
+
+/* Status badges - Ajustar colores para el modo oscuro */
+.status-active {
+  /* En modo oscuro, invertir los colores para mejor contraste */
+  @apply bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-300 dark:border-green-800;
+}
+
+.status-inactive {
+  @apply bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-300 dark:border-red-800;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900 dark:text-yellow-300 dark:border-yellow-800;
+}
+
+.status-completed {
+  @apply bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-800;
+}
+
+
+/* ------------------------------------------------ */
+/* ANIMACIONES Y OTROS ESTILOS (Sin cambios) */
+/* ------------------------------------------------ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 0.6s ease-out;
+}
+
+.status-badge {
+  @apply px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+/* [Otros estilos personalizados como gradientes y botones... se mantienen igual] */
+.gradient-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.gradient-secondary {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+}
+
+.health-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.care-gradient {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.medical-gradient {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.modern-button {
+  @apply bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-2 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5;
+}
+
+.medical-icon {
+  @apply transition-transform duration-300 hover:scale-110;
+}
+
+.clickable-card {
+  @apply cursor-pointer hover:scale-105 transition-transform duration-200;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
