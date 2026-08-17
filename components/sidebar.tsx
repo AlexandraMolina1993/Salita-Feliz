@@ -11,13 +11,13 @@ import {
   UserCheck,
   Syringe,
   Calendar,
-  QrCode,
   BarChart3,
   Bell,
   Settings,
   Heart,
   ChevronLeft,
   ChevronRight,
+  Bot,
 } from "lucide-react"
 
 const navigation = [
@@ -28,6 +28,7 @@ const navigation = [
   { name: "Vacunas", href: "/dashboard/vacunas", icon: Syringe },
   { name: "Turnos", href: "/dashboard/turnos", icon: Calendar },
   { name: "Reportes", href: "/dashboard/reportes", icon: BarChart3 },
+  { name: "Monitor IA", href: "/dashboard/ia-monitor", icon: Bot },
   { name: "Notificaciones", href: "/dashboard/notificaciones", icon: Bell },
   { name: "Configuración", href: "/dashboard/configuracion", icon: Settings },
 ]
@@ -39,12 +40,13 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        "bg-white border-r border-gray-200 flex flex-col transition-all duration-300",
+        // 🎨 Agregamos fondos, bordes y transiciones adaptadas a Dark Mode
+        "bg-white dark:bg-slate-950 border-r border-gray-200 dark:border-slate-800 flex flex-col transition-all duration-300",
         collapsed ? "w-16" : "w-64",
       )}
     >
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-gray-200 dark:border-slate-800">
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="flex items-center space-x-3">
@@ -52,12 +54,17 @@ export function Sidebar() {
                 <Heart className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold gradient-text">Salita Feliz</h1>
-                <p className="text-xs text-gray-600">Sistema de Gestión</p>
+                <h1 className="text-lg font-bold gradient-text dark:from-blue-400 dark:to-purple-500">Salita Feliz</h1>
+                <p className="text-xs text-gray-600 dark:text-slate-400">Sistema de Gestión</p>
               </div>
             </div>
           )}
-          <Button variant="ghost" size="sm" onClick={() => setCollapsed(!collapsed)} className="p-1.5">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setCollapsed(!collapsed)} 
+            className="p-1.5 text-gray-500 dark:text-slate-400 dark:hover:bg-slate-900"
+          >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
@@ -73,11 +80,16 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200",
                   isActive
-                    ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
-                    : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
+                    ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg dark:shadow-purple-950/30"
+                    : "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-900 hover:text-gray-900 dark:hover:text-white",
                 )}
               >
-                <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-gray-500")} />
+                <item.icon 
+                  className={cn(
+                    "h-5 w-5 flex-shrink-0", 
+                    isActive ? "text-white" : "text-gray-500 dark:text-slate-400"
+                  )} 
+                />
                 {!collapsed && <span className="font-medium">{item.name}</span>}
               </div>
             </Link>
@@ -86,10 +98,10 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-200 dark:border-slate-800">
         {!collapsed && (
-          <div className="text-center text-xs text-gray-500">
-            <p>&copy; 2025 Salita Feliz</p>
+          <div className="text-center text-xs text-gray-500 dark:text-slate-500">
+            <p>&copy; 2026 Salita Feliz</p>
             <p>Versión 2.0</p>
           </div>
         )}

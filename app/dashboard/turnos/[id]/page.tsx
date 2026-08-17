@@ -1,3 +1,4 @@
+// users/alexa/Desktop/salita/app/dashboard/turnos/[id]/page.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -24,6 +25,7 @@ import {
 } from "lucide-react"
 import { getAppointmentById, updateAppointmentStatus, type Appointment } from "@/lib/database"
 import { useToast } from "@/hooks/use-toast"
+import { formatFullSpanishDate, formatNominalDate, formatNominalTime } from "@/lib/dateUtils"
 
 export default function AppointmentDetailPage() {
   const router = useRouter()
@@ -171,12 +173,7 @@ export default function AppointmentDetailPage() {
                 <div>
                   <CardTitle className="text-xl">Turno de Vacunación</CardTitle>
                   <CardDescription>
-                    {new Date(appointment.appointment_date).toLocaleDateString("es-AR", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    {formatFullSpanishDate(appointment.appointment_date)}
                   </CardDescription>
                 </div>
               </div>
@@ -298,14 +295,14 @@ export default function AppointmentDetailPage() {
               <div className="text-center p-4 rounded-lg bg-primary/10 border border-primary/20">
                 <Calendar className="h-8 w-8 mx-auto text-primary mb-2" />
                 <p className="font-bold text-primary">
-                  {new Date(appointment.appointment_date).toLocaleDateString("es-AR")}
+                  {formatNominalDate(appointment.appointment_date)}
                 </p>
                 <p className="text-sm text-muted-foreground">Fecha del turno</p>
               </div>
 
               <div className="text-center p-4 rounded-lg bg-blue-50 border border-blue-200">
                 <Clock className="h-8 w-8 mx-auto text-blue-600 mb-2" />
-                <p className="font-bold text-blue-600">{appointment.appointment_time}</p>
+                <p className="font-bold text-blue-600">{formatNominalTime(appointment.appointment_time, true)}</p>
                 <p className="text-sm text-blue-800">Hora programada</p>
               </div>
             </CardContent>

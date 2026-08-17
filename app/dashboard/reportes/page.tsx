@@ -27,7 +27,7 @@ import {
 
 
 export default function ReportsPage() {
-  const [period, setPeriod] = useState("2025")
+  const [period, setPeriod] = useState("2025", "2026", "2027")
   const [chartData, setChartData] = useState([])
   const [distributionData, setDistributionData] = useState([])
   const [trendData, setTrendData] = useState([])
@@ -269,6 +269,8 @@ export default function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="2025">2025</SelectItem>
+                      <SelectItem value="2026">2026</SelectItem>
+                      <SelectItem value="2027">2027</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

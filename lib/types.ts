@@ -9,6 +9,7 @@ export interface appointments {
   appointment_date: string;
   status: 'completed' | 'cancelled' | 'scheduled';
   notes?: string;
+  deleted_at?: string | null;
 }
 
 // Puedes añadir más interfaces aquí según tus necesidades (ej. Patient, Nurse, Vaccine)

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Package, AlertTriangle, Calendar, Building, Hash, Thermometer, DollarSign, Eye } from "lucide-react"
 import Link from "next/link"
 import type { Vaccine } from "@/lib/supabase"
+import { formatNominalDate, parseLocalDate } from "@/lib/dateUtils"
 
 interface VaccineDetailsModalProps {
   vaccines: Vaccine[]
@@ -46,13 +47,15 @@ export function VaccineDetailsModal({ vaccines, isOpen, onClose, title, descript
 
   const isExpired = (expirationDate: string) => {
     const today = new Date()
-    const expDate = new Date(expirationDate)
+    const expDate = parseLocalDate(expirationDate)
+    if (!expDate) return false
     return expDate < today
   }
 
   const isExpiringSoon = (expirationDate: string) => {
     const today = new Date()
-    const expDate = new Date(expirationDate)
+    const expDate = parseLocalDate(expirationDate)
+    if (!expDate) return false
     const diffTime = expDate.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     return diffDays <= 30 && diffDays > 0
@@ -138,7 +141,7 @@ export function VaccineDetailsModal({ vaccines, isOpen, onClose, title, descript
                                   : "text-green-600"
                             }`}
                           >
-                            {new Date(vaccine.expiration_date).toLocaleDateString("es-AR")}
+                            {formatNominalDate(vaccine.expiration_date)}
                           </span>
                         </div>
                       )}

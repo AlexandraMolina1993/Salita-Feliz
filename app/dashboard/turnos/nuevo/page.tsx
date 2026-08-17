@@ -1,3 +1,4 @@
+//app/turnos/nuevo/page.tsx
 "use client"
 
 import type React from "react"
@@ -15,17 +16,17 @@ import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, CalendarIcon, Save } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { formatDateToISO, getArgentinaTodayDateString } from "@/lib/dateUtils"
 import { cn } from "@/lib/utils"
 import {
   getPatients,
   getNurses,
-  getVaccines,
-  createAppointment,
   type Patient,
   type Nurse,
-  type Vaccine,
   type Appointment,
 } from "@/lib/database"
+import { getVaccinesStockAction, type ExtendedVaccineItem } from "@/app/actions/vaccines"
+import { createAppointmentAction } from "@/app/actions/appointments"
 
 export default function NewAppointmentPage() {
   const router = useRouter()
@@ -36,21 +37,30 @@ export default function NewAppointmentPage() {
   const [date, setDate] = useState<Date>()
   const [patients, setPatients] = useState<Patient[]>([])
   const [nurses, setNurses] = useState<Nurse[]>([])
-  const [vaccines, setVaccines] = useState<Vaccine[]>([])
+  const [vaccines, setVaccines] = useState<ExtendedVaccineItem[]>([])
   const [selectedPatient, setSelectedPatient] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
+  const [doseToApply, setDoseToApply] = useState<number>(0.5); // Valor inicial predeterminado
 
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [patientsData, nursesData, vaccinesData] = await Promise.all([
+        const [patientsData, nursesData, allVaccinesData] = await Promise.all([
           getPatients(),
           getNurses(),
-          getVaccines(),
+          getVaccinesStockAction(),
         ])
         setPatients(patientsData)
         setNurses(nursesData.filter((n) => n.is_active))
-        setVaccines(vaccinesData.filter((v) => v.stock_quantity > 0))
+        
+        // Filtrar exclusivamente vacunas activas, con stock real disponible en clínica Y no vencidas
+        const todayISO = getArgentinaTodayDateString();
+        const clinicallyAvailable = allVaccinesData.filter(
+          (v) => (v.available_doses_for_clinic ?? 0) > 0 &&
+                 v.is_active !== false &&
+                 (!v.expiration_date || v.expiration_date >= todayISO)
+        );
+        setVaccines(clinicallyAvailable)
 
         if (patientIdFromUrl) {
           setSelectedPatient(patientIdFromUrl)
@@ -58,13 +68,13 @@ export default function NewAppointmentPage() {
       } catch (error) {
         toast({
           title: "Error",
-          description: "No se pudieron cargar los datos",
+          description: "No se pudieron cargar los datos del inventario y turnos",
           variant: "destructive",
         })
       }
     }
     loadInitialData()
-  }, [patientIdFromUrl])
+  }, [patientIdFromUrl, toast])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -82,23 +92,25 @@ export default function NewAppointmentPage() {
       return
     }
     
-    // --- LÍNEA CORREGIDA ---
-    // Usamos `format` para obtener la fecha local en formato "yyyy-MM-dd"
-    const localDateString = format(date, "yyyy-MM-dd");
-    // ------------------------
-
-    const appointmentData: Omit<Appointment, "id" | "created_at" | "updated_at"> = {
-      patient_id: formData.get("patient") as string,
-      nurse_id: (formData.get("nurse") as string) || undefined,
-      vaccine_id: formData.get("vaccine") as string,
-      appointment_date: localDateString, // Usamos la fecha local corregida
-      appointment_time: formData.get("time") as string,
-      status: "scheduled",
-      notes: formData.get("notes") as string,
-    }
+    // Normalización de fecha sin desfasaje horario
+    const localDateString = formatDateToISO(date);
 
     try {
-      await createAppointment(appointmentData)
+      const result = await createAppointmentAction({
+        patient_id: formData.get("patient") as string,
+        nurse_id: (formData.get("nurse") as string) || undefined,
+        vaccine_id: formData.get("vaccine") as string,
+        appointment_date: localDateString,
+        appointment_time: formData.get("time") as string,
+        dose_to_apply: parseFloat(formData.get("dose") as string) || doseToApply,
+        status: "scheduled",
+        notes: (formData.get("notes") as string) || "",
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "No se pudo programar el turno");
+      }
+
       toast({
         title: "Turno programado",
         description: "El turno ha sido programado correctamente",
@@ -107,7 +119,7 @@ export default function NewAppointmentPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "No se pudo programar el turno",
+        description: error instanceof Error ? error.message : "No se pudo programar el turno",
         variant: "destructive",
       })
     } finally {
@@ -208,6 +220,8 @@ export default function NewAppointmentPage() {
                     <SelectValue placeholder="Seleccione una hora" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="08:00">08:00</SelectItem>
+                    <SelectItem value="08:30">08:30</SelectItem>
                     <SelectItem value="09:00">09:00</SelectItem>
                     <SelectItem value="09:30">09:30</SelectItem>
                     <SelectItem value="10:00">10:00</SelectItem>
@@ -226,19 +240,50 @@ export default function NewAppointmentPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vaccine">Vacuna</Label>
-                <Select name="vaccine" required>
+                <Select 
+                  name="vaccine" 
+                  required
+                  onValueChange={(val) => {
+                    const sel = vaccines.find((v) => (v.id === val || v.vaccine_id === val));
+                    if (sel?.dose_amount) {
+                      setDoseToApply(Number(sel.dose_amount));
+                    }
+                  }}
+                >
                   <SelectTrigger id="vaccine">
                     <SelectValue placeholder="Seleccione una vacuna" />
                   </SelectTrigger>
                   <SelectContent>
-                    {vaccines.map((vaccine) => (
-                      <SelectItem key={vaccine.id} value={vaccine.id!}>
-                        {vaccine.name} (Stock: {vaccine.stock_quantity})
+                    {vaccines.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No hay vacunas con stock disponible
                       </SelectItem>
-                    ))}
+                    ) : (
+                      vaccines.map((vaccine) => {
+                        const vId = (vaccine.id || vaccine.vaccine_id)!;
+                        return (
+                          <SelectItem key={vId} value={vId}>
+                            {vaccine.name} ({vaccine.available_doses_for_clinic} dosis disp. • {vaccine.physical_vials} viales)
+                          </SelectItem>
+                        );
+                      })
+                    )}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+  <Label htmlFor="dose">Dosis a aplicar (ml)</Label>
+  <Input
+    id="dose"
+    name="dose"
+    type="number"
+    step="0.1"
+    min="0.1"
+    value={doseToApply}
+    onChange={(e) => setDoseToApply(parseFloat(e.target.value))}
+    required
+  />
+</div>
               <div className="space-y-2">
                 <Label htmlFor="nurse">Enfermero (Opcional)</Label>
                 <Select name="nurse">
@@ -262,7 +307,7 @@ export default function NewAppointmentPage() {
           </Card>
         </div>
         <div className="mt-6 flex justify-end space-x-4">
-          <Button variant="outline" onClick={() => router.push("/dashboard/turnos")} disabled={isLoading}>
+          <Button variant="outline" type="button" onClick={() => router.push("/dashboard/turnos")} disabled={isLoading}>
             Cancelar
           </Button>
           <Button type="submit" disabled={isLoading}>

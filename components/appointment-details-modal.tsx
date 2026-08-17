@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar, Clock, User, CheckCircle, XCircle, AlertCircle, Eye } from "lucide-react"
 import Link from "next/link"
 import type { Appointment } from "@/lib/supabase"
+import { isTodayInArgentina, formatNominalDate, formatNominalTime } from "@/lib/dateUtils"
 
 interface AppointmentDetailsModalProps {
   appointments: Appointment[]
@@ -56,9 +57,7 @@ export function AppointmentDetailsModal({
   }
 
   const isToday = (fecha: string) => {
-    const today = new Date().toDateString()
-    const appointmentDate = new Date(fecha).toDateString()
-    return today === appointmentDate
+    return isTodayInArgentina(fecha)
   }
 
   return (
@@ -112,7 +111,7 @@ export function AppointmentDetailsModal({
                           <span
                             className={`font-medium ${isToday(appointment.appointment_date) ? "text-blue-600" : ""}`}
                           >
-                            {new Date(appointment.appointment_date).toLocaleDateString("es-AR")}
+                            {formatNominalDate(appointment.appointment_date)}
                             {isToday(appointment.appointment_date) && (
                               <Badge className="ml-2 text-xs bg-blue-100 text-blue-800">HOY</Badge>
                             )}
@@ -122,7 +121,7 @@ export function AppointmentDetailsModal({
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-gray-400" />
                           <span className="text-gray-600">Hora:</span>
-                          <span className="font-medium">{appointment.appointment_time}</span>
+                          <span className="font-medium">{formatNominalTime(appointment.appointment_time, true)}</span>
                         </div>
 
                         {appointment.nurses && (

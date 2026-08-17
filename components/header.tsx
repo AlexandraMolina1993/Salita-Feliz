@@ -7,19 +7,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Bell, LogOut, Settings, User } from "lucide-react"
+import { useTheme } from "@/contexts/ThemeContext" // 🎯 Importamos tu contexto global
+import { NotificationBell } from "@/components/notification-bell"
+import { LogOut, Moon, Sun } from "lucide-react"
 import { logout, getCurrentUser } from "@/lib/auth"
 
 export function Header() {
   const router = useRouter()
-  const [notifications] = useState(3) // Mock notification count
   const user = getCurrentUser()
+  
+  // 🎯 Consumimos el estado del tema global
+  const { isDarkMode, setDarkMode } = useTheme()
 
   const handleLogout = () => {
     logout()
@@ -27,14 +29,33 @@ export function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
+    /* 🎨 CAMBIADO: bg-white por bg-card y colores bordes adaptables a Shadcn */
+    <header className="bg-card border-b border-border px-6 py-4 transition-colors duration-300">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{/* This will be updated based on the current page */}</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {/* Se actualiza basado en la página actual */}
+          </h1>
         </div>
 
-        <div className="flex items-center space-x-4">
-          
+        <div className="flex items-center space-x-3 sm:space-x-4">
+          {/* 🔔 CAMPANITA DE NOTIFICACIONES DEL SISTEMA */}
+          <NotificationBell />
+
+          {/* 🌗 BOTÓN TOGGLE DE MODO OSCURO (Añadido al lado del perfil) */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDarkMode(!isDarkMode)}
+            className="text-muted-foreground hover:text-foreground rounded-xl"
+            title={isDarkMode ? "Activar Modo Claro" : "Activar Modo Oscuro"}
+          >
+            {isDarkMode ? (
+              <Sun className="h-5 w-5 text-amber-500 animate-fade-in" />
+            ) : (
+              <Moon className="h-5 w-5 text-slate-700 animate-fade-in" />
+            )}
+          </Button>
 
           {/* User Menu */}
           <DropdownMenu>
@@ -48,11 +69,9 @@ export function Header() {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              
-              
+            <DropdownMenuContent className="w-56 bg-card border-border text-foreground" align="end" forceMount>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:bg-destructive/10 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Cerrar Sesión</span>
               </DropdownMenuItem>

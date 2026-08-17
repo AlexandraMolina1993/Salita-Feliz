@@ -121,7 +121,6 @@ export default function NurseDetailPage() {
           description: "Enfermero no encontrado.",
           variant: "destructive",
         });
-        // Usamos setTimeout para asegurar que el toast se muestre antes del redirect
         setTimeout(() => router.push("/dashboard/enfermeros"), 100); 
         return;
       }
@@ -152,6 +151,14 @@ export default function NurseDetailPage() {
       .join('')
       .toUpperCase()
       .substring(0, 2);
+  };
+
+  // Función auxiliar para formatear la fecha de nacimiento sin desfasaje UTC
+  const formatBirthDate = (dateStr?: string | null) => {
+    if (!dateStr) return "No registrado";
+    // dateStr viene como "YYYY-MM-DD"
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
   };
 
   // --- Renderizado Condicional ---
@@ -207,7 +214,6 @@ export default function NurseDetailPage() {
         <Card className="md:col-span-2 card-hover">
           <CardHeader className="pb-4">
             <div className="flex items-center space-x-4">
-              {/* Contenedor Clickable para abrir el modal */}
               <div 
                 className={`cursor-pointer transition-opacity ${nurse.image_url ? 'hover:opacity-80' : ''}`}
                 onClick={() => {
@@ -216,7 +222,6 @@ export default function NurseDetailPage() {
                     }
                 }}
               >
-                {/* TAMAÑO GRANDE: h-24 w-24 */}
                 <Avatar className="h-24 w-24 border-4 border-blue-200">
                   <AvatarImage 
                     src={nurse.image_url ?? undefined} 
@@ -254,7 +259,7 @@ export default function NurseDetailPage() {
                 <div>
                   <p className="text-sm font-medium">Fecha de Nacimiento</p>
                   <p className="text-sm text-muted-foreground">
-                    {nurse.birth_date ? new Date(nurse.birth_date).toLocaleDateString() : "No registrado"}
+                    {formatBirthDate(nurse.birth_date)}
                   </p>
                 </div>
               </div>
@@ -271,12 +276,16 @@ export default function NurseDetailPage() {
                   <p className="text-sm font-medium text-blue-800">Matrícula</p>
                   <p className="text-lg font-bold text-blue-600">{nurse.license_number}</p>
                 </div>
-               
+                
                 {nurse.start_date && (
                   <div className="p-4 rounded-lg bg-purple-50 border border-purple-200">
                     <p className="text-sm font-medium text-purple-800">Fecha de Ingreso</p>
                     <p className="text-lg font-bold text-purple-600">
-                      {new Date(nurse.start_date).toLocaleDateString()}
+                      {formatInTimeZone(
+                        new Date(nurse.start_date),
+                        'America/Argentina/Cordoba',
+                        'dd/MM/yyyy'
+                      )}
                     </p>
                   </div>
                 )}
@@ -375,8 +384,6 @@ export default function NurseDetailPage() {
             </CardContent>
           </Card>
 
-         
-
           {/* Acciones Rápidas */}
           <Card className="card-hover">
             <CardHeader>
@@ -428,13 +435,13 @@ export default function NurseDetailPage() {
                                     ? 'secondary'
                                     : appointment.status === 'completed'
                                     ? 'default'
-                                    : 'destructive' // Estado 'cancelled' u otros
+                                    : 'destructive'
                                   }
                               >
                                 {appointment.status === 'scheduled'
                                   ? 'Programado'
                                   : appointment.status === 'completed'
-                                  ? 'Completado' // <-- Corregí el doble ':' aquí
+                                  ? 'Completado'
                                   : 'Cancelado'}
                               </Badge>
                             </TableCell>
@@ -538,12 +545,10 @@ export default function NurseDetailPage() {
         </div>
       </div>
       
-       {/* 🚨 MODAL DE VISUALIZACIÓN DE IMAGEN EN TAMAÑO REAL */}
+       {/* MODAL DE VISUALIZACIÓN DE IMAGEN EN TAMAÑO REAL */}
       {nurse.image_url && (
         <Dialog open={isImageOpen} onOpenChange={setIsImageOpen}>
-          {/* Usamos max-w-4xl para que sea grande y quitamos el fondo/borde predeterminado */}
           <DialogContent className="sm:max-w-4xl w-[90%] p-0 border-none bg-transparent shadow-none">
-            {/* CORRECCIÓN: Título necesario para accesibilidad (sr-only lo oculta visualmente) */}
             <DialogHeader className="sr-only">
               <DialogTitle>Imagen de Perfil de {nurse.full_name}</DialogTitle>
             </DialogHeader>
@@ -552,7 +557,6 @@ export default function NurseDetailPage() {
               <img 
                 src={nurse.image_url} 
                 alt={`Foto de ${nurse.full_name}`} 
-                // Asegura que la imagen se ajuste a la pantalla y sea visible
                 className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
               />
             </div>

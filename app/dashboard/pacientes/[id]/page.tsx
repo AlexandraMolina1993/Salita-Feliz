@@ -9,6 +9,7 @@ import { ArrowLeft, Edit, Calendar, Phone, Mail, MapPin, Heart, User, Shield } f
 import Link from "next/link"
 import { getPatientById, activatePatient, deletePatient, getAppointmentsByPatientId } from "@/lib/database"
 import type { Patient, Appointment } from "@/lib/database"
+import { formatNominalDate } from "@/lib/dateUtils"
 
 export default function PatientDetailPage() {
   const params = useParams()
@@ -338,7 +339,7 @@ export default function PatientDetailPage() {
             <div className="flex items-center text-sm text-gray-600">
               <Calendar className="h-4 w-4 mr-2" />
               <span>
-                {new Date(appointment.appointment_date).toLocaleDateString("es-AR")}
+                {formatNominalDate(appointment.appointment_date)}
               </span>
             </div>
             {appointment.notes && (

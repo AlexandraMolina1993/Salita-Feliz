@@ -1,17 +1,30 @@
 // lib/database.ts
-
-import type { Appointment } from "./types";
-import { createClient } from "@supabase/supabase-js";
+import { revalidatePath } from 'next/cache';
 import {
-  type Patient,
-  type Nurse,
-  type Vaccine,
-  type VaccinationRecord,
-  type Notification,
-  type SystemConfig,
-  Database,
-  replenishment_schedules,
+  supabase,
+  type Appointment,
+  type Patient,
+  type Nurse,
+  type VaccinationRecord,
+  type Notification,
+  type SystemConfig,
+  Database,
+  replenishment_schedules,
 } from "./supabase";
+import { getArgentinaTodayDateString } from "./dateUtils";
+
+export { supabase, type Appointment };
+
+export async function getUpcomingVaccinations() {
+  return getAppointments();
+}
+
+export type VaccineType = {
+  id: number;
+  name: string;
+  description?: string;
+  created_at?: string;
+};
 // --- Tipos de Datos para Incidente y Reposición ---
 export type IncidentType = 
     | 'Daño Físico / Descarte' 
@@ -41,28 +54,58 @@ export type ReplenishmentSchedule = {
     notes: string | null;
     created_at: string;
 };
+// --- Tipos de Datos Unificados ---
 
-// Crea y exporta el cliente de Supabase para que pueda ser usado en otros archivos.
-export const supabase = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export type HistoryItemType = 'replenishment' | 'incident';
 
-// --- Funciones auxiliares (Helpers) ---
-const isExpiringSoon = (expirationDate: string | null) => {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  const diffTime = expDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays <= 30 && diffDays > 0;
+// Tipo para unificar el historial (Reposición + Incidente)
+export type UnifiedHistoryItem = {
+    id: string;
+    date: string;
+    type: 'replenishment' | 'incident';
+    description: string;
+    quantity: number | null;
+    status: string;
+};
+export type Vaccine = {
+    id: string;
+    name: string;
+    type: string;
+    manufacturer: string | null;
+    storage_temperature: string | null;
+    expiration_date: string | null;
+    stock_quantity: number;
+    min_stock_level: number;
+    lot_number: string | null;
+    // Agrega más campos de tu tabla 'vaccines'
+};
+// Tipo de la tabla 'incidents'
+export type Incident = {
+    id: string;
+    vaccine_id: string;
+    incident_type: IncidentType; // Usamos el tipo definido
+    description: string;
+    quantity_affected: number | null;
+    reported_by_user_id: string;
+    created_at: string; // Timestamp de la DB
+    status: 'registrado' | 'investigacion' | 'resuelto'; // Ejemplo de estados
 };
 
-const isExpired = (expirationDate: string | null) => {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  return expDate < today;
+// --- Funciones auxiliares (Helpers) ---
+const isExpiringSoon = (expirationDate: string | null | undefined) => {
+  if (!expirationDate) return false;
+  const today = new Date();
+  const expDate = new Date(expirationDate);
+  const diffTime = expDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= 30 && diffDays > 0;
+};
+
+const isExpired = (expirationDate: string | null | undefined) => {
+  if (!expirationDate) return false;
+  const today = new Date();
+  const expDate = new Date(expirationDate);
+  return expDate < today;
 };
 
 const calculateAge = (birthDate: string | null) => {
@@ -397,23 +440,24 @@ export async function getNurseStats(nurse_id: string) {
 }
 // --- Función para obtener turnos asignados a un enfermero ---
 export async function getAssignedAppointments(nurseId: string) {
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      `
-      *,
-      patients:patient_id(*),
-      vaccines:vaccine_id(*)
-      `
-    )
-    .eq("nurse_id", nurseId)
-    .order("appointment_date", { ascending: false });
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      `
+      *,
+      patients:patient_id(*),
+      vaccines:vaccine_id(*)
+      `
+    )
+    .eq("nurse_id", nurseId)
+    .is("deleted_at", null)
+    .order("appointment_date", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching assigned appointments:", error);
-    throw error;
-  }
-  return data || [];
+  if (error) {
+    console.error("Error fetching assigned appointments:", error);
+    throw error;
+  }
+  return data || [];
 }
 // --- Función para obtener el historial de pacientes atendidos por un enfermero ---
 export async function getNursePatientHistory(nurseId: string) {
@@ -450,66 +494,68 @@ export async function getNursePatientHistory(nurseId: string) {
 }
 // --- Función para obtener el reporte de rendimiento de un enfermero ---
 export async function getNursePerformanceReport(nurseId: string) {
-  try {
-    // Conteo total de pacientes atendidos (únicos)
-    const { data: totalPatientsData, error: totalPatientsError } = await supabase
-      .from('appointments')
-      .select('patient_id')
-      .eq('nurse_id', nurseId)
-      .eq('status', 'completed');
+  try {
+    // 1. Conteo total de pacientes atendidos (únicos)
+    const { data: totalPatientsData, error: totalPatientsError } = await supabase
+      .from('appointments')
+      .select('patient_id')
+      .eq('nurse_id', nurseId)
+      .eq('status', 'completed');
 
-    if (totalPatientsError) throw totalPatientsError;
+    if (totalPatientsError) throw totalPatientsError;
 
-    const uniquePatients = new Set(totalPatientsData.map(record => record.patient_id));
-    const totalPatientsCount = uniquePatients.size;
+    const uniquePatients = new Set(totalPatientsData.map(record => record.patient_id));
+    const totalPatientsCount = uniquePatients.size;
 
-    // Conteo de vacunas aplicadas
-    const { count: totalVaccinesCount, error: totalVaccinesError } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact' })
-      .eq('nurse_id', nurseId)
-      .eq('status', 'completed');
+    // 2. Conteo total de vacunas aplicadas
+    const { count: totalVaccinesCount, error: totalVaccinesError } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact' })
+      .eq('nurse_id', nurseId)
+      .eq('status', 'completed');
 
-    if (totalVaccinesError) throw totalVaccinesError;
+    if (totalVaccinesError) throw totalVaccinesError;
 
-    // Conteo de vacunas del mes
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-    const { count: monthlyVaccinesCount, error: monthlyVaccinesError } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact' })
-      .eq('nurse_id', nurseId)
-      .eq('status', 'completed')
-      .gte('appointment_date', startOfMonth);
+    // 3. Conteo de vacunas del mes actual
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    const { count: monthlyVaccinesCount, error: monthlyVaccinesError } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact' })
+      .eq('nurse_id', nurseId)
+      .eq('status', 'completed')
+      .gte('appointment_date', startOfMonth);
 
-    if (monthlyVaccinesError) throw monthlyVaccinesError;
+    if (monthlyVaccinesError) throw monthlyVaccinesError;
 
-    // Conteo de vacunas de hoy
-    const startOfDay = new Date().toISOString().split('T')[0];
-    const { count: todayVaccinesCount, error: todayVaccinesError } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact' })
-      .eq('nurse_id', nurseId)
-      .eq('status', 'completed')
-      .eq('appointment_date', startOfDay);
+    // 4. Conteo de vacunas de hoy (Normalizado para UTC-3 Argentina)
+    const todayArgentina = getArgentinaTodayDateString();
 
-    if (todayVaccinesError) throw todayVaccinesError;
+    const { count: todayVaccinesCount, error: todayVaccinesError } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact' })
+      .eq('nurse_id', nurseId)
+      .eq('status', 'completed')
+      .eq('appointment_date', todayArgentina);
 
-    return {
-      totalPatients: totalPatientsCount,
-      totalVaccines: totalVaccinesCount,
-      monthlyVaccines: monthlyVaccinesCount,
-      todayVaccines: todayVaccinesCount,
-    };
+    if (todayVaccinesError) throw todayVaccinesError;
 
-  } catch (error) {
-    console.error("Error fetching nurse performance report:", error);
-    return {
-      totalPatients: 0,
-      totalVaccines: 0,
-      monthlyVaccines: 0,
-      todayVaccines: 0,
-    };
-  }
+    // Devolvemos solo los datos numéricos limpios
+    return {
+      totalPatients: totalPatientsCount,
+      totalVaccines: totalVaccinesCount,
+      monthlyVaccines: monthlyVaccinesCount,
+      todayVaccines: todayVaccinesCount,
+    };
+
+  } catch (error) {
+    console.error("Error fetching nurse performance report:", error);
+    return {
+      totalPatients: 0,
+      totalVaccines: 0,
+      monthlyVaccines: 0,
+      todayVaccines: 0,
+    };
+  }
 }
 /**
  * Extrae la ruta del archivo dentro del bucket 'avatars' de una URL pública de Supabase.
@@ -637,59 +683,167 @@ export interface SpecialtyCount {
  * @returns Un array con objetos { specialty, count }
  */
 export async function getSpecialtyCounts(): Promise<SpecialtyCount[]> {
+    // Traemos las especialidades de los enfermeros activos
     const { data, error } = await supabase
-        .from('nurses') // Tu tabla de enfermeros
-        .select('specialty, count') // Selecciona la especialidad y la cuenta
-        .not('specialty', 'is', null) // Ignora las filas sin especialidad definida
-        .not('specialty', 'eq', ''); // Ignora cadenas vacías si las hay
+        .from('nurses')
+        .select('specialty')
+        .not('specialty', 'is', null)
+        .not('specialty', 'eq', '');
         
     if (error) {
         console.error("Error al obtener el conteo de especialidades:", error);
         throw new Error(error.message);
     }
     
-    // Supabase (PostgREST) usa la sintaxis .select('col, count') para GROUP BY simple
-    // El resultado debería ser un array de objetos con 'specialty' y 'count'.
-    return data as SpecialtyCount[];
+    // Hacemos la agrupación y el conteo limpio en JavaScript para evitar el Error 400
+    const counts = data.reduce((acc, record) => {
+        const spec = record.specialty;
+        acc[spec] = (acc[spec] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+    
+    return Object.keys(counts).map(specialty => ({
+        specialty,
+        count: counts[specialty]
+    }));
 }
 
 // --- CRUD de Vacunas ---
 export async function getVaccines(): Promise<Vaccine[]> {
-  const { data, error } = await supabase
-    .from("vaccines")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data: stockData, error: stockErr } = await supabase
+    .from("v_vaccines_stock")
+    .select("*")
+    .order("name", { ascending: true });
 
-  if (error) throw error;
-  return data || [];
+  if (!stockErr && stockData && stockData.length > 0) {
+    return stockData.map((v: any) => {
+      const physicalVials = Number(v.physical_vials ?? v.current_stock_vials ?? v.physical_vials_for_repos ?? Math.ceil(Number(v.current_stock_fraction) || 0));
+      const totalMl = Number(v.total_ml ?? v.current_stock_ml) || (physicalVials * (Number(v.dose_amount) || 0.5));
+
+      return {
+        id: v.vaccine_id,
+        vaccine_id: v.vaccine_id,
+        name: v.name,
+        type: v.type || "General",
+        manufacturer: v.laboratory || "Laboratorio",
+        laboratory: v.laboratory || "Laboratorio",
+        dose_amount: Number(v.dose_amount) || 0.5,
+        net_content: Number(v.net_content) || 5.0,
+        lot_number: v.lot_number || "LOTE-GENERAL",
+        expiration_date: v.expiration_date,
+        stock_quantity: physicalVials,
+        current_stock_fraction: Number(v.current_stock_fraction ?? physicalVials),
+        current_stock_vials: physicalVials,
+        physical_vials: physicalVials,
+        available_doses_for_clinic: Number(v.available_doses_for_clinic) || Math.floor(totalMl / (Number(v.dose_amount) || 0.5)),
+        total_ml: totalMl,
+        current_stock_ml: totalMl,
+        min_stock_level: Number(v.min_stock_level) || 10,
+        storage_temperature: v.storage_temperature || "2°C a 8°C",
+        is_active: v.is_active ?? true,
+        stock_status: v.stock_status || (physicalVials <= 0 ? 'OUT_OF_STOCK' : physicalVials <= (Number(v.min_stock_level) || 10) ? 'CRITICAL_LOW' : 'OPTIMAL'),
+      } as any;
+    });
+  }
+
+  const { data, error } = await supabase
+    .from("vaccines")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Consulta la vista maestra `v_vaccines_stock` con los 3 filtros clínicos obligatorios:
+ * 1. Fecha de vencimiento hoy o posterior (.gte('expiration_date', today))
+ * 2. Vacuna no dada de baja (.eq('is_active', true))
+ * 3. Stock real para pacientes (.gt('available_doses_for_clinic', 0))
+ */
+export async function getClinicallyAvailableVaccines() {
+  const today = new Date().toISOString().split("T")[0];
+  const { data, error } = await supabase
+    .from("v_vaccines_stock")
+    .select("*")
+    .gte("expiration_date", today)
+    .eq("is_active", true)
+    .gt("available_doses_for_clinic", 0)
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.error("Error al obtener vacunas clínicamente viables:", error);
+    throw error;
+  }
+  return data || [];
 }
 
 export async function getVaccineById(id: string): Promise<Vaccine | null> {
-  const { data, error } = await supabase.from("vaccines").select("*").eq("id", id).single();
+  const { data: vStock } = await supabase
+    .from("v_vaccines_stock")
+    .select("*")
+    .eq("vaccine_id", id)
+    .maybeSingle();
 
-  if (error) throw error;
-  return data;
+  const { data: rawVaccine } = await supabase
+    .from("vaccines")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!vStock && !rawVaccine) {
+    return null;
+  }
+
+  const base = rawVaccine || {};
+  const stock = vStock || {};
+
+  const physicalVials = Number(stock.physical_vials ?? stock.current_stock_vials ?? stock.physical_vials_for_repos ?? Math.ceil(Number(stock.current_stock_fraction) || 0) ?? base.stock_quantity ?? 0);
+  const totalMl = Number(stock.total_ml ?? stock.current_stock_ml ?? (physicalVials * (Number(stock.dose_amount ?? base.dose_amount) || 0.5)));
+
+  return {
+    ...base,
+    id: stock.vaccine_id || base.id || id,
+    vaccine_id: stock.vaccine_id || base.id || id,
+    name: stock.name || base.name,
+    manufacturer: stock.laboratory || base.manufacturer,
+    laboratory: stock.laboratory || base.manufacturer,
+    type: stock.type || base.type,
+    dose_amount: Number(stock.dose_amount ?? base.dose_amount) || 0.5,
+    net_content: Number(stock.net_content ?? base.net_content) || 5.0,
+    min_stock_level: Number(stock.min_stock_level ?? base.min_stock_level) || 10,
+    expiration_date: stock.expiration_date || base.expiration_date,
+    is_active: stock.is_active ?? base.is_active ?? true,
+    stock_quantity: physicalVials,
+    current_stock_vials: physicalVials,
+    physical_vials: physicalVials,
+    current_stock_fraction: Number(stock.current_stock_fraction ?? physicalVials),
+    total_ml: totalMl,
+    current_stock_ml: totalMl,
+    available_doses_for_clinic: Number(stock.available_doses_for_clinic ?? Math.floor(totalMl / (Number(stock.dose_amount ?? base.dose_amount) || 0.5))),
+    stock_status: stock.stock_status || (physicalVials <= 0 ? 'OUT_OF_STOCK' : physicalVials <= (Number(stock.min_stock_level ?? base.min_stock_level) || 10) ? 'CRITICAL_LOW' : 'OPTIMAL'),
+  } as any;
 }
 
 export async function createVaccine(vaccine: Omit<Vaccine, "id" | "created_at" | "updated_at">): Promise<Vaccine> {
-  const { data, error } = await supabase.from("vaccines").insert([vaccine]).select().single();
+  const { data, error } = await supabase.from("vaccines").insert([vaccine]).select().single();
 
-  if (error) throw error;
-  return data;
+  if (error) throw error;
+  return data;
 }
 
 export async function updateVaccine(id: string, vaccine: Partial<Vaccine>): Promise<Vaccine> {
-  const { data, error } = await supabase.from("vaccines").update(vaccine).eq("id", id).select().single();
+  const { data, error } = await supabase.from("vaccines").update(vaccine).eq("id", id).select().single();
 
-  if (error) throw error;
-  return data;
+  if (error) throw error;
+  return data;
 }
 
 /**
  * Agrega unidades de stock a una vacuna existente y actualiza los datos.
  * * NOTA: Esta función realiza dos pasos:
- * 1. Consulta el stock actual.
- * 2. Actualiza el stock, lote y vencimiento en una sola operación.
+ * 1. Inserta un movimiento en stock_movements (Ledger inmutable).
+ * 2. Actualiza el stock, lote y vencimiento en la tabla base vaccines.
  * * @param vaccineId El ID de la vacuna.
  * @param stock_quantity La cantidad de unidades a agregar (debe ser > 0).
  * @param lot_number (Opcional) El nuevo número de lote si aplica.
@@ -697,7 +851,7 @@ export async function updateVaccine(id: string, vaccine: Partial<Vaccine>): Prom
  * @returns La vacuna actualizada.
  */
 export async function addStockToVaccine(
-    vaccineId: string, // Renombré 'Id' a 'vaccineId' para mayor claridad.
+    vaccineId: string,
     stock_quantity: number, 
     lot_number?: string, 
     expiration_date?: Date | string | null
@@ -707,7 +861,20 @@ export async function addStockToVaccine(
         throw new Error("La cantidad de stock a agregar debe ser mayor a cero.");
     }
     
-    // 1. Obtener el registro actual para conocer el stock_quantity
+    // 1. Registrar movimiento inmutable en stock_movements
+    await supabase.from("stock_movements").insert({
+      vaccine_id: vaccineId,
+      type: "REPLENISHMENT",
+      quantity_vials: stock_quantity,
+      description: `Ingreso de stock: +${stock_quantity} viales`,
+      metadata: {
+        lot_number: lot_number || null,
+        expiration_date: expiration_date || null,
+        source: "add_stock_dialog"
+      }
+    });
+
+    // 2. Obtener el registro actual para conocer el stock_quantity
     const { data: currentVaccine, error: fetchError } = await supabase
         .from("vaccines")
         .select("stock_quantity")
@@ -722,28 +889,26 @@ export async function addStockToVaccine(
     }
 
     // Calcular el nuevo stock
-    const newStock = currentVaccine.stock_quantity + stock_quantity;
+    const newStock = Number(currentVaccine.stock_quantity || 0) + stock_quantity;
 
-    // 2. Preparar los datos de actualización
+    // 3. Preparar los datos de actualización
     const updatedData: Partial<Vaccine> = { 
         stock_quantity: newStock 
     };
 
-    // Agregar lote y fecha de vencimiento solo si se proporcionaron
     if (lot_number) {
         updatedData.lot_number = lot_number;
     }
-    // Convertir Date a string si es necesario, y asegurarse de que null sea manejado
     if (expiration_date !== undefined) {
         updatedData.expiration_date = expiration_date;
     }
 
-    // 3. Ejecutar la actualización en Supabase
+    // 4. Ejecutar la actualización en Supabase
     const { data, error: updateError } = await supabase
         .from("vaccines")
         .update(updatedData)
         .eq("id", vaccineId)
-        .select() // Pide el registro actualizado completo
+        .select()
         .single();
 
     if (updateError) {
@@ -751,14 +916,8 @@ export async function addStockToVaccine(
         throw updateError;
     }
 
-    // 4. Registrar la transacción de inventario (opcional pero recomendado)
-    // NOTA: Si tienes una tabla 'inventory_transactions', aquí deberías insertarle un registro.
-    
-    console.log(`Stock de la vacuna ${vaccineId} actualizado. Nuevo stock: ${newStock}`);
-
     return data;
 }
-
 
 export async function getVaccinationStatsByMonth(year: number) {
   const { data, error } = await supabase
@@ -889,6 +1048,26 @@ export async function getReplenishmentSchedulesByVaccineId(vaccineId: string): P
     // Asegúrate de que el retorno coincida con la interfaz ReplenishmentSchedule[]
     return (data || []) as ReplenishmentSchedule[];
 }
+/**
+ * Obtiene todos los incidentes reportados para una vacuna específica.
+ * @param vaccineId El ID de la vacuna.
+ * @returns Una lista de incidentes reportados.
+ */
+export async function getVaccineIncidentsByVaccineId(vaccineId: string): Promise<IncidentReport[]> {
+    const { data, error } = await supabase
+        .from('incident_reports') // ⬅️ Nombre de tu tabla en Supabase
+        .select('*')
+        .eq('vaccine_id', vaccineId)
+        .order('created_at', { ascending: false }); // Ordenar por fecha, más reciente primero
+
+    if (error) {
+        console.error("Error fetching vaccine incidents:", error);
+        throw new Error("No se pudo cargar la lista de incidentes.");
+    }
+
+    // El tipo de retorno ya está definido en la firma de la función (Promise<IncidentReport[]>)
+    return (data || []) as IncidentReport[]; 
+}
 // Función de Inserción
 export async function reportVaccineIncident(
     vaccineId: string,
@@ -918,8 +1097,51 @@ export async function reportVaccineIncident(
         console.error("Supabase Error al reportar incidente:", error.message);
         throw new Error(`Error al registrar el incidente: ${error.message}`);
     }
-    
+   
     return data as IncidentReport;
+}
+/**
+ * Obtiene, combina y ordena cronológicamente el historial de reposiciones e incidentes de una vacuna.
+ * @param vaccineId El ID de la vacuna.
+ * @returns Una lista unificada de historial ordenada por fecha descendente.
+ */
+export async function getVaccineUnifiedHistory(vaccineId: string): Promise<UnifiedHistoryItem[]> {
+    // 1. Cargar datos de forma concurrente
+    const [replenishments, incidents] = await Promise.all([
+        getReplenishmentSchedulesByVaccineId(vaccineId),
+        getVaccineIncidentsByVaccineId(vaccineId), 
+    ]);
+
+    // 2. Mapear Reposiciones a UnifiedHistoryItem (COMPLETADO)
+    const mappedReplenishments: UnifiedHistoryItem[] = (replenishments || []).map(r => ({
+        id: r.id,
+        date: r.scheduled_date, // Usamos scheduled_date como la fecha principal
+        type: 'replenishment',
+        description: `Reposición programada: ${r.notes ? r.notes : 'Sin nota'}`,
+        quantity: r.quantity_to_order,
+        status: r.status,
+    }));
+
+    // 3. Mapear Incidentes a UnifiedHistoryItem (COMPLETADO)
+    const mappedIncidents: UnifiedHistoryItem[] = (incidents || []).map(i => ({
+        id: i.id,
+        date: i.created_at, // Usamos created_at como la fecha principal
+        type: 'incident',
+        description: `Incidente (${i.incident_type}): ${i.description}`,
+        quantity: i.quantity_affected ? -i.quantity_affected : null, // Cantidad afectada, generalmente negativa
+        status: i.status,
+    }));
+
+    // 4. Unificar y Ordenar
+    const unifiedHistory: UnifiedHistoryItem[] = [
+        ...mappedReplenishments,
+        ...mappedIncidents,
+    ];
+
+    // Ordenar por fecha de forma descendente (más reciente primero)
+    unifiedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return unifiedHistory;
 }
 /**
  * Obtiene las estadísticas de uso de una vacuna específica.
@@ -1010,110 +1232,159 @@ export async function updateVaccineType(id: number, data: Partial<VaccineType>) 
 }
 // --- CRUD de Turnos ---
 export async function getAppointments(): Promise<Appointment[]> {
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(`
-      *,
-      patients:patient_id(*),
-      vaccines:vaccine_id(*),
-      nurses:nurse_id(*)
-    `)
-    .order("appointment_date", { ascending: false });
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(`
+      *,
+      patients:patient_id(*),
+      vaccines:vaccine_id(*),
+      nurses:nurse_id(*)
+    `)
+    .is("deleted_at", null)
+    .order("appointment_date", { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+  if (error) throw error;
+  return data || [];
 }
 
 export async function getAppointmentById(id: string): Promise<Appointment | null> {
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(`
-      *,
-      patients:patient_id(*),
-      vaccines:vaccine_id(*),
-      nurses:nurse_id(*)
-    `)
-    .eq("id", id)
-    .single();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(`
+      *,
+      patients:patient_id(*),
+      vaccines:vaccine_id(*),
+      nurses:nurse_id(*)
+    `)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .single();
 
-  if (error) throw error;
-  return data;
+  if (error) throw error;
+  return data;
 }
 
 export async function createAppointment(
-  // La función ahora recibe los campos por separado o un objeto que los contenga
-  appointment: Omit<Appointment, "id" | "created_at" | "updated_at">,
+  // La función ahora recibe los campos por separado o un objeto que los contenga
+  appointment: Omit<Appointment, "id" | "created_at" | "updated_at">,
 ): Promise<Appointment> {
 
-  // Asumimos que el objeto appointment ya tiene los campos
-  // appointment_date y appointment_time con sus valores correctos.
-  // Tu base de datos los guardará tal cual.
+  // Asumimos que el objeto appointment ya tiene los campos
+  // appointment_date y appointment_time con sus valores correctos.
+  // Tu base de datos los guardará tal cual.
 
-  const { data, error } = await supabase
-    .from("appointments")
-    .insert([appointment]) // El objeto appointment ya debería tener la fecha y hora correctas
-    .select(`
-      *,
-      patients:patient_id(*),
-      vaccines:vaccine_id(*),
-      nurses:nurse_id(*)
-    `)
-    .single();
+  const { data, error } = await supabase
+    .from("appointments")
+    .insert([appointment]) // El objeto appointment ya debería tener la fecha y hora correctas
+    .select(`
+      *,
+      patients:patient_id(*),
+      vaccines:vaccine_id(*),
+      nurses:nurse_id(*)
+    `)
+    .single();
 
-  if (error) {
-    console.error("Error al insertar el turno en Supabase:", error);
-    throw error;
-  }
-  return data;
+  if (error) {
+    console.error("Error al insertar el turno en Supabase:", error);
+    throw error;
+  }
+  return data;
 }
 
 
 export async function updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment> {
-  const { data, error } = await supabase
-    .from("appointments")
-    .update(appointment)
-    .eq("id", id)
-    .select(`
-      *,
-      patients:patient_id(*),
-      vaccines:vaccine_id(*),
-      nurses:nurse_id(*)
-    `)
-    .single();
+  const { data, error } = await supabase
+    .from("appointments")
+    .update(appointment)
+    .eq("id", id)
+    .select(`
+      *,
+      patients:patient_id(*),
+      vaccines:vaccine_id(*),
+      nurses:nurse_id(*)
+    `)
+    .single();
 
-  if (error) throw error;
-  return data;
+  if (error) throw error;
+  return data;
 }
 
 export async function updateAppointmentStatus(id: string, status: string): Promise<void> {
-  const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
+  const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
 
-  if (error) throw error;
+  if (error) throw error;
 }
 
 export async function deleteAppointment(id: string): Promise<void> {
-  const { error } = await supabase.from("appointments").delete().eq("id", id);
+  const { error } = await supabase
+    .from("appointments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
 
-  if (error) throw error;
+  if (error) throw error;
 }
 // **Función para obtener los turnos de un paciente con los detalles de la vacuna**
 export async function getAppointmentsByPatientId(patientId: string): Promise<Appointment[]> {
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      `
-      *,
-      vacuna:vaccine_id(name, manufacturer)
-      `
-    )
-    .eq("patient_id", patientId)
-    .order("appointment_date", { ascending: false });
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      `
+      *,
+      vacuna:vaccine_id(name, manufacturer)
+      `
+    )
+    .eq("patient_id", patientId)
+    .is("deleted_at", null)
+    .order("appointment_date", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching appointments:", error);
-    return [];
-  }
-  return data as Appointment[];
+  if (error) {
+    console.error("Error fetching appointments:", error);
+    return [];
+  }
+  return data as Appointment[];
+}
+// ... tus otros imports y la definición de la interfaz Appointment ...
+
+// Agrega esta función aquí:
+export async function completeAppointment(turno: Appointment) {
+  if (turno.status === 'completed') return { success: true };
+
+  const { data: vacuna, error: fetchError } = await supabase
+    .from('vaccines')
+    .select('stock_quantity, net_content')
+    .eq('id', turno.vaccine_id)
+    .single();
+
+  if (fetchError || !vacuna) throw new Error("No se pudo obtener la vacuna");
+
+  // AHORA BIEN:
+  // dosisAplicada es el valor que el usuario ingresó (ej: 0.5)
+  // volumenTotalEnvase es el valor que tienes en 'net_content' (ej: 2.0)
+  const dosisAplicada = Number(turno.dose_to_apply || 0); 
+  const volumenTotalEnvase = Number(vacuna.net_content || 0);
+  
+  if (volumenTotalEnvase <= 0) throw new Error("La configuración de la vacuna es inválida");
+
+  // CALCULO CORRECTO:
+  // Si aplicas 0.5 de un total de 2.0, el resultado es 0.25
+  const fraccionDeEnvaseConsumida = dosisAplicada / volumenTotalEnvase;
+
+  // Restamos esa fracción al stock total
+  const nuevoStock = Number(vacuna.stock_quantity) - fraccionDeEnvaseConsumida;
+
+  // Actualizamos el stock en la base de datos
+  const { error: updateStockError } = await supabase
+    .from('vaccines')
+    .update({ stock_quantity: nuevoStock.toFixed(4) }) // .toFixed(4) mantiene la precisión decimal
+    .eq('id', turno.vaccine_id);
+
+  if (updateStockError) {
+    // Si esto falla, idealmente deberías revertir el estado del turno
+    // o lanzar un alerta crítica al usuario.
+    throw new Error("Stock no actualizado: " + updateStockError.message);
+  }
+  
+  return { success: true };
 }
 // --- CRUD de Registros de Vacunación ---
 export async function getVaccinationRecords(): Promise<VaccinationRecord[]> {
@@ -1163,6 +1434,66 @@ export async function createVaccinationRecord(
   if (error) throw error;
   return data;
 }
+
+// lib/database.ts
+
+/**
+ * Elimina una orden de reposición programada por su ID de la tabla correspondiente
+ */
+export async function deleteReplenishmentSchedule(scheduleId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('replenishment_schedules') // 💡 Verifica si tu tabla en Supabase se llama exactamente así
+    .delete()
+    .eq('id', scheduleId);
+
+  if (error) {
+    console.error("Error al eliminar la reposición en Supabase:", error);
+    throw new Error(error.message);
+  }
+}
+
+// En lib/database.ts
+export const updateVaccineStock = async (vaccineId: string, amount: number) => {
+  // 1. Obtener stock actual
+  const { data: vaccine, error: fetchError } = await supabase
+    .from('vaccines')
+    .select('stock_quantity')
+    .eq('id', vaccineId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  // 2. Calcular nuevo stock (amount será negativo, ej: -0.5)
+  const currentStock = vaccine.stock_quantity || 0;
+  
+  // Usamos Math.max(0, ...) para evitar que el stock sea negativo
+  const newStock = Math.max(0, currentStock + amount);
+
+  // 3. Actualizar
+  const { data, error: updateError } = await supabase
+    .from('vaccines')
+    .update({ stock_quantity: newStock })
+    .eq('id', vaccineId)
+    .select(); // Agregamos .select() para que devuelva el dato actualizado
+    
+  if (updateError) throw updateError;
+  return data;
+};
+/**
+ * Elimina un incidente reportado por su ID de la tabla correspondiente
+ */
+export async function deleteVaccineIncident(incidentId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('incident_reports') // 💡 Verifica si tu tabla en Supabase se llama exactamente así
+    .delete()
+    .eq('id', incidentId);
+
+  if (error) {
+    console.error("Error al eliminar el incidente en Supabase:", error);
+    throw new Error(error.message);
+  }
+}
+
 
 // --- CRUD de Notificaciones ---
 export async function getNotifications(): Promise<Notification[]> {
@@ -1249,22 +1580,65 @@ export async function getPatientsContactInfo(patientIds: string[]): Promise<Pati
 }
 
 // --- CRUD de Configuración del Sistema ---
-// 1. Función para LEER la configuración por categoría
-export async function getConfigByCategory(category: string): Promise<SystemConfig[]> {
+// lib/database.ts
+// 1. Función adaptada para la nueva estructura de registro único de system_config
+export async function getConfigByCategory(category: string): Promise<any[]> {
+  // Como tu tabla no tiene columnas 'category', traemos directamente la fila de configuración
   const { data, error } = await supabase
     .from('system_config')
     .select('*')
-    .eq('category', category); // Filtra por la columna 'category'
+    .limit(1); // Trae el único registro de configuración que existe
+
+  console.log("🔍 [Debug system_config]:", { data, error, solicitado: category });
 
   if (error) {
-    console.error("Error al obtener configuración por categoría:", error);
-    throw error;
+    console.warn("⚠️ Error controlado al obtener system_config:", error.message);
+    return []; 
   }
-  
-  // Si no hay datos, devuelve un array vacío
-  return (data as SystemConfig[]) || []; 
-}
 
+  // Si no hay filas creadas en la tabla todavía, evitamos que explote enviando un array vacío
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  // Extraemos la fila única
+  const configRow = data[0];
+  
+  const isDark = configRow.modo_oscuro_activo === true || String(configRow.modo_oscuro_activo) === 'true';
+
+  const mappedConfig = [
+    // --- Categoría General ---
+    { category: 'General', key: 'nombre_del_centro', value: configRow.nombre_del_centro },
+    { category: 'General', key: 'idioma_sistema', value: configRow.idioma_sistema },
+    { category: 'General', key: 'modo_oscuro_activo', value: isDark ? 'dark' : 'light' },
+    
+    // --- Categoría Theme ---
+    { category: 'theme', key: 'modo_oscuro_activo', value: isDark ? 'dark' : 'light' },
+    
+    // --- Categoría Notificaciones (MAPEADO EXACTO CON TU COMPONENTE) ---
+    { category: 'Notificaciones', key: 'email_notifications_active', value: 'true' },
+    { category: 'Notificaciones', key: 'email_smtp_server', value: 'smtp.gmail.com' },
+    { category: 'Notificaciones', key: 'email_smtp_user', value: configRow.email_contacto || 'salitafeliz8@gmail.com' },
+    { category: 'Notificaciones', key: 'email_smtp_password', value: '••••••••••••' },
+    
+    { category: 'Notificaciones', key: 'sms_notifications_active', value: 'false' },
+    { category: 'Notificaciones', key: 'sms_provider', value: 'twilio' }, // En minúscula para que coincida con el SelectItem
+    { category: 'Notificaciones', key: 'sms_api_key', value: '' },
+    
+    { category: 'Notificaciones', key: 'appointment_reminders_active', value: 'true' },
+    { category: 'Notificaciones', key: 'reminder_time_hours', value: '24' } // En string numérico como tu inicializador
+  ];
+
+  // Filtro inteligente para las solicitudes del sistema
+  const requestedCategory = category.toLowerCase();
+  
+  if (requestedCategory === 'theme') {
+    const themeItem = mappedConfig.find(item => item.category === 'theme');
+    return themeItem ? [themeItem] : [];
+  }
+
+  return mappedConfig.filter(item => item.category.toLowerCase() === requestedCategory);
+}
 // 2. Función para GUARDAR (actualizar/insertar) múltiples configuraciones
 // Recibe un array de objetos con { key, value }
 export async function updateConfig(updates: Array<{ key: string; value: string; category: string }>): Promise<void> {
@@ -1304,14 +1678,14 @@ export async function getDashboardStats() {
     getVaccines(),
   ]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getArgentinaTodayDateString();
 
-  return {
-    totalPatients: patients.length,
-    totalNurses: nurses.length,
-    totalVaccines: vaccines.length,
-    totalAppointments: appointments.length,
-    todayAppointments: appointments.filter((a) => a.appointment_date === today).length,
+  return {
+    totalPatients: patients.length,
+    totalNurses: nurses.length,
+    totalVaccines: vaccines.length,
+    totalAppointments: appointments.length,
+    todayAppointments: appointments.filter((a) => a.appointment_date === today).length,
     completedAppointments: appointments.filter((a) => a.status === "completed").length,
     pendingAppointments: appointments.filter((a) => a.status === "scheduled").length,
     activeNurses: nurses.filter((n) => n.is_active).length,
@@ -1319,22 +1693,72 @@ export async function getDashboardStats() {
 }
 
 export async function getVaccineStats() {
-  const vaccines = await getVaccines();
+  const { data: vStock, error } = await supabase
+    .from("v_vaccines_stock")
+    .select("*");
 
-  const lowStockVaccines = vaccines.filter((v) => v.stock_quantity <= v.min_stock_level);
-  const expiringSoonVaccines = vaccines.filter((v) => isExpiringSoon(v.expiration_date));
-  const expiredVaccines = vaccines.filter((v) => isExpired(v.expiration_date));
+  if (!error && vStock && vStock.length > 0) {
+    const mappedStock = vStock.map((v: any) => {
+      const physicalVials = Number(v.physical_vials ?? v.current_stock_vials ?? v.physical_vials_for_repos ?? Math.ceil(Number(v.current_stock_fraction) || 0));
+      const totalMl = Number(v.total_ml ?? v.current_stock_ml) || (physicalVials * (Number(v.dose_amount) || 0.5));
 
-  return {
-    total: vaccines.length,
-    lowStock: lowStockVaccines.length,
-    expiringSoon: expiringSoonVaccines.length,
-    expired: expiredVaccines.length,
-    lowStockVaccines,
-    expiringSoonVaccines,
-    expiredVaccines,
-    allVaccines: vaccines,
-  };
+      return {
+        id: v.vaccine_id,
+        vaccine_id: v.vaccine_id,
+        name: v.name,
+        manufacturer: v.laboratory || "Laboratorio",
+        laboratory: v.laboratory || "Laboratorio",
+        type: v.type || "General",
+        dose_amount: Number(v.dose_amount) || 0.5,
+        net_content: Number(v.net_content) || 5.0,
+        stock_quantity: physicalVials,
+        physical_vials: physicalVials,
+        current_stock_vials: physicalVials,
+        current_stock_fraction: Number(v.current_stock_fraction ?? physicalVials),
+        total_ml: totalMl,
+        current_stock_ml: totalMl,
+        available_doses_for_clinic: Number(v.available_doses_for_clinic) || Math.floor(totalMl / (Number(v.dose_amount) || 0.5)),
+        min_stock_level: Number(v.min_stock_level) || 10,
+        expiration_date: v.expiration_date,
+        is_active: v.is_active ?? true,
+        stock_status: v.stock_status || (physicalVials <= 0 ? 'OUT_OF_STOCK' : physicalVials <= (Number(v.min_stock_level) || 10) ? 'CRITICAL_LOW' : 'OPTIMAL'),
+      } as any;
+    });
+
+    const lowStockVaccines = mappedStock.filter(
+      (v: any) => v.stock_quantity <= v.min_stock_level
+    );
+    const expiringSoonVaccines = mappedStock.filter((v: any) => isExpiringSoon(v.expiration_date));
+    const expiredVaccines = mappedStock.filter((v: any) => isExpired(v.expiration_date));
+
+    return {
+      total: mappedStock.length,
+      lowStock: lowStockVaccines.length,
+      expiringSoon: expiringSoonVaccines.length,
+      expired: expiredVaccines.length,
+      lowStockVaccines,
+      expiringSoonVaccines,
+      expiredVaccines,
+      allVaccines: mappedStock,
+    };
+  }
+
+  const vaccines = await getVaccines();
+
+  const lowStockVaccines = vaccines.filter((v) => v.stock_quantity <= v.min_stock_level);
+  const expiringSoonVaccines = vaccines.filter((v) => isExpiringSoon(v.expiration_date));
+  const expiredVaccines = vaccines.filter((v) => isExpired(v.expiration_date));
+
+  return {
+    total: vaccines.length,
+    lowStock: lowStockVaccines.length,
+    expiringSoon: expiringSoonVaccines.length,
+    expired: expiredVaccines.length,
+    lowStockVaccines,
+    expiringSoonVaccines,
+    expiredVaccines,
+    allVaccines: vaccines,
+  };
 }
 
 export async function getPatientStats() {

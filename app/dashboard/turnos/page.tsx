@@ -1,21 +1,39 @@
+//app/dashboard/turnos/page.tsx
 'use client'
+
+export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Search, CheckCircle, XCircle, CalendarClock } from "lucide-react"
+import { Plus, Search, CheckCircle, XCircle, CalendarClock, ShieldCheck, Trash2 } from "lucide-react"
 import Link from "next/link"
-import { getAppointments, updateAppointmentStatus, type Appointment } from "@/lib/database"
+import { getAppointments, type Appointment } from "@/lib/database"
+import { cancelAppointmentAction, deleteAppointmentAction } from "@/app/actions/appointments"
+import { CompleteAppointmentDialog } from "@/components/complete-appointment-dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { formatFullSpanishDate, formatNominalTime } from "@/lib/dateUtils"
 
 export default function TurnosPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null)
+  const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false)
+  const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -26,8 +44,9 @@ export default function TurnosPage() {
     try {
       setLoading(true)
       const data = await getAppointments()
-      setAppointments(data)
+      setAppointments(data || [])
     } catch (error) {
+      console.error("Error al cargar turnos:", error)
       toast({
         title: "Error",
         description: "No se pudieron cargar los turnos",
@@ -38,21 +57,66 @@ export default function TurnosPage() {
     }
   }
 
-  const handleStatusUpdate = async (id: string, newStatus: string) => {
-    const action = newStatus === 'completed' ? 'completar' : 'cancelar';
-    if (confirm(`¿Estás seguro de que quieres ${action} este turno?`)) {
+  const handleOpenCompleteDialog = (appointment: any) => {
+    setSelectedAppointment(appointment)
+    setIsCompleteDialogOpen(true)
+  }
+
+  const handleOpenDeleteDialog = (appointment: Appointment) => {
+    setAppointmentToDelete(appointment)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!appointmentToDelete || !appointmentToDelete.id) return
+
+    const idAEliminar = appointmentToDelete.id
+
+    try {
+      const res = await deleteAppointmentAction(idAEliminar)
+      if (!res.success) {
+        throw new Error(res.error || "No se pudo eliminar el turno")
+      }
+
+      setAppointments((prev) => prev.filter((turno) => turno.id !== idAEliminar))
+      toast({
+        title: "Turno Eliminado",
+        description: "El turno ha sido eliminado correctamente del sistema.",
+      })
+    } catch (err) {
+      console.error("Error al eliminar turno:", err)
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "No se pudo eliminar el turno.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteDialogOpen(false)
+      setAppointmentToDelete(null)
+    }
+  }
+
+  const handleCancelAppointment = async (appointment: any) => {
+    if (!appointment || !appointment.id) return
+
+    if (confirm(`¿Estás seguro de que deseas cancelar el turno de ${appointment.patients?.full_name || 'este paciente'}?`)) {
       try {
-        await updateAppointmentStatus(id, newStatus)
+        const res = await cancelAppointmentAction(appointment.id)
+        if (!res.success) {
+          throw new Error(res.error || 'Error al cancelar el turno.')
+        }
+
         await loadAppointments()
-        toast({
-          title: `Turno ${newStatus === 'completed' ? 'Completado' : 'Cancelado'}`,
-          description: `El turno ha sido ${newStatus === 'completed' ? 'completado' : 'cancelado'} correctamente.`,
+        toast({ 
+          title: "Turno Cancelado", 
+          description: "El turno ha sido cancelado correctamente en el sistema." 
         })
       } catch (error) {
-        toast({
-          title: "Error",
-          description: "No se pudo actualizar el estado del turno",
-          variant: "destructive",
+        console.error("Error en handleCancelAppointment:", error)
+        toast({ 
+          title: "Error", 
+          description: error instanceof Error ? error.message : "No se pudo cancelar el turno.", 
+          variant: "destructive" 
         })
       }
     }
@@ -68,13 +132,13 @@ export default function TurnosPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'scheduled':
-        return <Badge className="bg-blue-500 hover:bg-blue-600 text-white">Programado</Badge>;
+        return <Badge className="bg-blue-500 hover:bg-blue-600 text-white font-medium">Programado</Badge>
       case 'completed':
-        return <Badge className="bg-green-500 hover:bg-green-600 text-white">Completado</Badge>;
+        return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Completado</Badge>
       case 'cancelled':
-        return <Badge className="bg-red-500 hover:bg-red-600 text-white">Cancelado</Badge>;
+        return <Badge className="bg-rose-500 hover:bg-rose-600 text-white font-medium">Cancelado</Badge>
       default:
-        return <Badge variant="secondary">Desconocido</Badge>;
+        return <Badge variant="secondary">Desconocido</Badge>
     }
   }
 
@@ -83,7 +147,7 @@ export default function TurnosPage() {
       <div className="flex justify-center items-center min-h-screen">
         <p className="text-gray-600 animate-pulse">Cargando turnos...</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -96,7 +160,7 @@ export default function TurnosPage() {
             Turnos
           </h1>
           <p className="text-muted-foreground mt-2 text-lg">
-            Gestiona los turnos de vacunación
+            Gestiona los turnos de vacunación y registro de dosis aplicadas
           </p>
         </div>
         <Link href="/dashboard/turnos/nuevo">
@@ -146,7 +210,7 @@ export default function TurnosPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <CalendarClock className="h-4 w-4 text-gray-500" />
                   <span>
-                    {format(new Date(appointment.appointment_date), 'EEEE, d \'de\' MMMM \'de\' yyyy', { locale: es })} a las {appointment.appointment_time?.substring(0, 5)}
+                    {formatFullSpanishDate(appointment.appointment_date)} a las {formatNominalTime(appointment.appointment_time, true)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -157,14 +221,14 @@ export default function TurnosPage() {
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4 border-t">
+              <div className="flex flex-wrap gap-2 pt-4 border-t">
                 {appointment.status === 'scheduled' && (
                   <>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleStatusUpdate(appointment.id!, 'completed')}
-                      className="flex-1 hover:bg-green-50 hover:border-green-300 text-green-600"
+                      onClick={() => handleOpenCompleteDialog(appointment)} 
+                      className="flex-1 hover:bg-emerald-50 hover:border-emerald-300 text-emerald-600 font-semibold"
                     >
                       <CheckCircle className="h-4 w-4 mr-1" />
                       Completar
@@ -172,8 +236,8 @@ export default function TurnosPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleStatusUpdate(appointment.id!, 'cancelled')}
-                      className="flex-1 hover:bg-red-50 hover:border-red-300 text-red-600"
+                      onClick={() => handleCancelAppointment(appointment)}
+                      className="flex-1 hover:bg-rose-50 hover:border-rose-300 text-rose-600"
                     >
                       <XCircle className="h-4 w-4 mr-1" />
                       Cancelar
@@ -189,6 +253,16 @@ export default function TurnosPage() {
                     Editar
                   </Button>
                 </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOpenDeleteDialog(appointment)}
+                  className="hover:bg-red-50 hover:border-red-300 text-red-600 hover:text-red-700 px-3"
+                  title="Eliminar turno"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="sr-only sm:not-sr-only sm:inline-block sm:ml-1">Eliminar</span>
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -212,6 +286,49 @@ export default function TurnosPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Finalización y Descuento Atómico de Stock */}
+      <CompleteAppointmentDialog
+        open={isCompleteDialogOpen}
+        onOpenChange={setIsCompleteDialogOpen}
+        appointment={selectedAppointment}
+        onSuccess={loadAppointments}
+      />
+
+      {/* Modal de Confirmación de Borrado Lógico */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600 text-xl font-bold">
+              <Trash2 className="h-5 w-5" />
+              ¿Eliminar este turno?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 space-y-2 pt-2 text-sm text-left">
+              <span>
+                Esta acción realizará un <strong className="text-gray-800">borrado lógico</strong> del turno del paciente{" "}
+                <span className="font-semibold text-gray-900">
+                  {appointmentToDelete?.patients?.full_name || "Paciente"}
+                </span>.
+              </span>
+              <span className="block mt-2 text-xs text-muted-foreground bg-muted p-2 rounded-md border">
+                El turno se ocultará del panel clínico y del historial visual, manteniendo la integridad referencial en la base de datos.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2 sm:gap-0">
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmDelete()
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+            >
+              Sí, Ocultar Turno
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { type Vaccine, type Patient, type Nurse, type Appointment } from '@/lib/supabase'
+import { formatNominalDate, formatNominalTime } from '@/lib/dateUtils'
 
 interface DashboardModalProps {
   isOpen: boolean
@@ -58,7 +59,7 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
                     <TableRow key={patient.id}>
                       <TableCell>{patient.dni}</TableCell>
                       <TableCell>{patient.full_name}</TableCell>
-                      <TableCell>{new Date(patient.birth_date).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatNominalDate(patient.birth_date)}</TableCell>
                       <TableCell>{patient.gender === 'male'? 'Masculino': patient.gender === 'female' ? 'Femenino': patient.gender}</TableCell>
                     </TableRow>
                   )
@@ -114,32 +115,43 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Fabricante</TableHead>
+                <TableHead>Laboratorio</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Lote</TableHead>
-                <TableHead>Stock</TableHead>
+                <TableHead>Viales</TableHead>
+                <TableHead>Volumen (ml)</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead>Vencimiento</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.map((item, idx) => {
-                // Type guard for Vaccine
-                if (
-                  item &&
-                  typeof item === 'object' &&
-                  'name' in item &&
-                  'stock_quantity' in item &&
-                  'min_stock_level' in item
-                ) {
-                  const vaccine = item as Vaccine
+                if (item && typeof item === 'object' && 'name' in item) {
+                  const anyV = item as any
+                  const vials = Number(anyV.physical_vials ?? anyV.current_stock_vials ?? anyV.physical_vials_for_repos ?? anyV.stock_quantity ?? 0)
+                  const ml = Number(anyV.total_ml ?? anyV.current_stock_ml ?? (vials * (Number(anyV.dose_amount) || 0.5)))
+                  const lab = anyV.laboratory || anyV.manufacturer || 'N/A'
+                  const status = anyV.stock_status || (vials === 0 ? 'OUT_OF_STOCK' : vials <= (anyV.min_stock_level || 10) ? 'CRITICAL_LOW' : 'OPTIMAL')
+                  const expDate = anyV.expiration_date ? formatNominalDate(anyV.expiration_date) : 'N/A'
+                  
                   return (
-                    <TableRow key={vaccine.id}>
-                      <TableCell>{vaccine.name}</TableCell>
-                      <TableCell>{vaccine.manufacturer}</TableCell>
-                      <TableCell>{vaccine.type}</TableCell>
-                      <TableCell>{vaccine.lot_number}</TableCell>
-                      <TableCell>{vaccine.stock_quantity}</TableCell>
-                      <TableCell>{vaccine.expiration_date ? new Date(vaccine.expiration_date).toLocaleDateString() : 'N/A'}</TableCell>
+                    <TableRow key={anyV.vaccine_id || anyV.id || idx}>
+                      <TableCell className="font-bold text-slate-800">{anyV.name}</TableCell>
+                      <TableCell className="text-slate-600">{lab}</TableCell>
+                      <TableCell className="text-slate-600">{anyV.type || '-'}</TableCell>
+                      <TableCell className="font-black text-indigo-700">{vials} viales</TableCell>
+                      <TableCell className="font-semibold text-slate-700">{typeof ml === 'number' ? ml.toFixed(1) : ml} ml</TableCell>
+                      <TableCell>
+                        {status === 'OPTIMAL' && (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Óptimo</Badge>
+                        )}
+                        {status === 'CRITICAL_LOW' && (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">Stock Bajo</Badge>
+                        )}
+                        {status === 'OUT_OF_STOCK' && (
+                          <Badge className="bg-rose-100 text-rose-800 border-rose-200">Sin Stock</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-slate-500 text-xs">{expDate}</TableCell>
                     </TableRow>
                   )
                 }
@@ -194,8 +206,8 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
 
       return (
         <TableRow key={appointment.id}>
-          <TableCell>{new Date(appointment.appointment_date).toLocaleDateString()}</TableCell>
-          <TableCell>{appointment.appointment_time}</TableCell>
+          <TableCell>{formatNominalDate(appointment.appointment_date)}</TableCell>
+          <TableCell>{formatNominalTime(appointment.appointment_time, true)}</TableCell>
           <TableCell>{appointment.patients?.full_name || 'N/A'}</TableCell>
           <TableCell>{appointment.vaccines?.name || 'N/A'}</TableCell>
           <TableCell>

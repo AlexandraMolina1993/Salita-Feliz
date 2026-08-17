@@ -1,9 +1,10 @@
+//app/dashboard/turnos/[id]/editar/page.tsx
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,18 +16,18 @@ import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, CalendarIcon, Save, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { parseLocalDate, formatDateToISO, getArgentinaTodayDateString } from "@/lib/dateUtils"
 import { cn } from "@/lib/utils"
 import {
   getAppointmentById,
-  updateAppointment,
   getPatients,
   getNurses,
-  getVaccines,
   type Appointment,
   type Patient,
   type Nurse,
-  type Vaccine,
 } from "@/lib/database"
+import { getVaccinesStockAction, type ExtendedVaccineItem } from "@/app/actions/vaccines"
+import { updateAppointmentAction, completeAppointmentAction } from "@/app/actions/appointments"
 
 export default function EditAppointmentPage() {
   const router = useRouter()
@@ -38,7 +39,9 @@ export default function EditAppointmentPage() {
   const [date, setDate] = useState<Date>()
   const [patients, setPatients] = useState<Patient[]>([])
   const [nurses, setNurses] = useState<Nurse[]>([])
-  const [vaccines, setVaccines] = useState<Vaccine[]>([])
+  const [vaccines, setVaccines] = useState<ExtendedVaccineItem[]>([])
+  const [selectedVaccineId, setSelectedVaccineId] = useState<string>("")
+  const [doseToApply, setDoseToApply] = useState<number>(0.5)
 
   useEffect(() => {
     if (params.id) {
@@ -48,28 +51,40 @@ export default function EditAppointmentPage() {
 
   const loadData = async (id: string) => {
     try {
-      const [appointmentData, patientsData, nursesData, vaccinesData] = await Promise.all([
+      const [appointmentData, patientsData, nursesData, allVaccinesData] = await Promise.all([
         getAppointmentById(id),
         getPatients(),
         getNurses(),
-        getVaccines(),
+        getVaccinesStockAction(),
       ])
 
       setAppointment(appointmentData)
       setPatients(patientsData)
       setNurses(nursesData.filter((n) => n.is_active))
-      setVaccines(vaccinesData.filter((v) => v.stock_quantity > 0))
 
-      // Establecer la fecha del turno
+      // Filtrar vacunas con stock clínico disponible y vigentes en fecha
+      const todayISO = getArgentinaTodayDateString()
+      const clinicallyAvailable = (allVaccinesData || []).filter((v) => {
+        const hasStock = (v.available_doses_for_clinic ?? 0) > 0
+        const isActive = v.is_active !== false
+        const isNotExpired = !v.expiration_date || v.expiration_date >= todayISO
+        // Mantener la vacuna actualmente asignada al turno para que el dropdown no quede en blanco
+        const isCurrent = (v.id === appointmentData.vaccine_id || v.vaccine_id === appointmentData.vaccine_id)
+        return (hasStock && isActive && isNotExpired) || isCurrent
+      })
+
+      setVaccines(clinicallyAvailable)
+      setSelectedVaccineId(appointmentData.vaccine_id)
+
+      if (appointmentData.dose_to_apply) {
+        setDoseToApply(appointmentData.dose_to_apply)
+      }
+
       if (appointmentData.appointment_date) {
-        setDate(new Date(appointmentData.appointment_date))
+        setDate(parseLocalDate(appointmentData.appointment_date) || undefined)
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo cargar el turno",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: "No se pudo cargar el turno", variant: "destructive" })
       router.push("/dashboard/turnos")
     } finally {
       setLoading(false)
@@ -79,40 +94,43 @@ export default function EditAppointmentPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsLoading(true)
-
     const formData = new FormData(event.currentTarget)
-
-    if (!date) {
-      toast({
-        title: "Error",
-        description: "Debe seleccionar una fecha",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-      return
-    }
-
-    const appointmentData: Partial<Appointment> = {
-      patient_id: formData.get("patient") as string,
-      nurse_id: (formData.get("nurse") as string) || undefined,
-      vaccine_id: formData.get("vaccine") as string,
-      appointment_date: date.toISOString().split("T")[0],
-      appointment_time: formData.get("time") as string,
-      status: formData.get("status") as string,
-      notes: formData.get("notes") as string,
-    }
+    const status = formData.get("status") as string
+    const vaccineId = (formData.get("vaccine") as string) || selectedVaccineId
 
     try {
-      await updateAppointment(params.id as string, appointmentData)
-      toast({
-        title: "Turno actualizado",
-        description: "El turno ha sido actualizado correctamente",
-      })
+      if (status === "completed" && appointment?.status !== "completed") {
+        const compRes = await completeAppointmentAction({
+          appointmentId: params.id as string,
+          doseMl: doseToApply,
+          nurseId: (formData.get("nurse") as string) || undefined,
+          notes: (formData.get("notes") as string) || undefined,
+        })
+        if (!compRes.success) {
+          throw new Error(compRes.error || "No se pudo completar el turno")
+        }
+      } else {
+        const updateRes = await updateAppointmentAction(params.id as string, {
+          patient_id: formData.get("patient") as string,
+          nurse_id: (formData.get("nurse") as string) || undefined,
+          vaccine_id: vaccineId,
+          appointment_date: formatDateToISO(date),
+          appointment_time: formData.get("time") as string,
+          status: status,
+          notes: (formData.get("notes") as string) || "",
+          dose_to_apply: doseToApply,
+        })
+        if (!updateRes.success) {
+          throw new Error(updateRes.error || "No se pudo actualizar el turno")
+        }
+      }
+
+      toast({ title: "Turno actualizado", description: "El turno ha sido actualizado correctamente" })
       router.push("/dashboard/turnos")
     } catch (error) {
       toast({
         title: "Error",
-        description: "No se pudo actualizar el turno",
+        description: error instanceof Error ? error.message : "No se pudo actualizar el turno",
         variant: "destructive",
       })
     } finally {
@@ -120,22 +138,8 @@ export default function EditAppointmentPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
-  if (!appointment) {
-    return (
-      <div className="text-center">
-        <p>Turno no encontrado</p>
-        <Button onClick={() => router.push("/dashboard/turnos")}>Volver a Turnos</Button>
-      </div>
-    )
-  }
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
+  if (!appointment) return <div className="text-center"><p>Turno no encontrado</p></div>
 
   return (
     <div className="space-y-6">
@@ -206,6 +210,8 @@ export default function EditAppointmentPage() {
                     <SelectValue placeholder="Seleccione una hora" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="08:00">08:00</SelectItem>
+                    <SelectItem value="08:30">08:30</SelectItem>
                     <SelectItem value="09:00">09:00</SelectItem>
                     <SelectItem value="09:30">09:30</SelectItem>
                     <SelectItem value="10:00">10:00</SelectItem>
@@ -224,18 +230,52 @@ export default function EditAppointmentPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vaccine">Vacuna</Label>
-                <Select name="vaccine" defaultValue={appointment.vaccine_id} required>
+                <Select
+                  name="vaccine"
+                  value={selectedVaccineId}
+                  onValueChange={(val) => {
+                    setSelectedVaccineId(val)
+                    const sel = vaccines.find((v) => (v.id === val || v.vaccine_id === val))
+                    if (sel?.dose_amount) {
+                      setDoseToApply(Number(sel.dose_amount))
+                    }
+                  }}
+                  required
+                >
                   <SelectTrigger id="vaccine">
                     <SelectValue placeholder="Seleccione una vacuna" />
                   </SelectTrigger>
                   <SelectContent>
-                    {vaccines.map((vaccine) => (
-                      <SelectItem key={vaccine.id} value={vaccine.id!}>
-                        {vaccine.name} (Stock: {vaccine.stock_quantity})
+                    {vaccines.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No hay vacunas con stock disponible
                       </SelectItem>
-                    ))}
+                    ) : (
+                      vaccines.map((vaccine) => {
+                        const vId = (vaccine.id || vaccine.vaccine_id)!
+                        const isExpired = vaccine.expiration_date && vaccine.expiration_date < getArgentinaTodayDateString()
+                        return (
+                          <SelectItem key={vId} value={vId}>
+                            {vaccine.name} ({vaccine.available_doses_for_clinic ?? 0} dosis disp. • {vaccine.physical_vials ?? 0} viales){isExpired ? " ⚠️ VENCIDA" : ""}
+                          </SelectItem>
+                        )
+                      })
+                    )}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dose">Dosis a aplicar (ml)</Label>
+                <Input
+                  id="dose"
+                  name="dose"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={doseToApply}
+                  onChange={(e) => setDoseToApply(parseFloat(e.target.value) || 0)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="nurse">Enfermero</Label>
@@ -285,3 +325,4 @@ export default function EditAppointmentPage() {
     </div>
   )
 }
+

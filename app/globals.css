@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    /* MODO CLARO (Light) */
-    --background: 0 0% 100%; /* Fondo principal: Blanco */
-    --foreground: 222.2 84% 4.9%; /* Texto principal: Negro/Gris Oscuro */
-    --card: 0 0% 100%; /* Fondo de Tarjetas: Blanco */
+    /* MODO CLARO (Light) - Impecable, se mantiene igual */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
@@ -33,26 +33,35 @@
   }
 
   .dark {
-    /* MODO OSCURO (Dark) */
-    --background: 222.2 84% 4.9%; /* Fondo principal: Gris muy oscuro */
-    --foreground: 210 40% 98%; /* Texto principal: Blanco/Gris claro */
-    --card: 222.2 84% 4.9%; /* Fondo de Tarjetas: Gris muy oscuro (igual que fondo para minimalismo) */
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* 🌌 MODO OSCURO (Dark) - OPTIMIZADO PARA ALTÍSIMO CONTRASTE VISUAL */
+    --background: 224 71% 4%;           /* Slate 950: Fondo base noche muy suave */
+    --foreground: 213 31% 91%;          /* Slate 200: Texto principal en blanco opaco */
+    
+    --card: 222 47% 11%;                /* Slate 900: Las tarjetas se aclaran para generar relieve */
+    --card-foreground: 213 31% 91%;
+    
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
+    
+    --secondary: 222 47% 11%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%; /* Gris suave para subtítulos o leyendas */
+    
+    --accent: 216 34% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    
+    --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    
+    --border: 216 34% 17%;              /* Slate 800: Bordes ultra sutiles integrados */
+    --input: 216 34% 17%;               /* Fondo interno de los campos de texto */
+    --ring: 224.3 76.3% 48%;
+    
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

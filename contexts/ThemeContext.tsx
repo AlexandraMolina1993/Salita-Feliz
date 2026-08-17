@@ -4,9 +4,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getConfigByCategory } from '@/lib/database';
 
-// Clave usada en Supabase
 const DARK_MODE_KEY = 'modo_oscuro_activo';
-const HTML_ELEMENT = typeof window !== 'undefined' ? document.documentElement : null;
 
 interface ThemeContextType {
   isDarkMode: boolean;
@@ -20,46 +18,44 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Función interna que sincroniza el estado de React con el DOM (la clase 'dark')
-  const applyThemeToDOM = (dark: boolean) => {
-    if (HTML_ELEMENT) {
-      if (dark) {
-        HTML_ELEMENT.classList.add('dark');
+  // Sincronización directa y limpia con el DOM
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const htmlElement = document.documentElement;
+      if (isDarkMode) {
+        htmlElement.classList.add('dark');
+        htmlElement.style.colorScheme = 'dark';
       } else {
-        HTML_ELEMENT.classList.remove('dark');
+        htmlElement.classList.remove('dark');
+        htmlElement.style.colorScheme = 'light';
       }
     }
-  };
+  }, [isDarkMode]);
 
-  // Función para ser llamada desde los componentes (ej. GeneralSettingsPage)
-  const setDarkMode = (value: boolean) => {
-    setIsDarkMode(value);
-    applyThemeToDOM(value);
-  };
-
-  // 1. Efecto para cargar el tema inicial de Supabase al montar
+  // Carga inicial desde la base de datos
   useEffect(() => {
     const fetchAndApplyTheme = async () => {
       try {
         const data = await getConfigByCategory('General');
         const darkModeConfig = data.find(item => item.key === DARK_MODE_KEY);
-        const initialDark = darkModeConfig ? darkModeConfig.value === 'true' : false;
+        
+        const initialDark = darkModeConfig 
+          ? (darkModeConfig.value === 'dark' || darkModeConfig.value === 'true') 
+          : false;
         
         setIsDarkMode(initialDark);
-        applyThemeToDOM(initialDark);
       } catch (error) {
-        console.error("Error al cargar tema:", error);
+        console.error("❌ Error al cargar tema desde el proveedor:", error);
       } finally {
         setIsLoading(false);
       }
     };
     fetchAndApplyTheme();
-  }, []); // Solo se ejecuta una vez
+  }, []);
 
-  // 2. Efecto para asegurar que la clase 'dark' siempre refleje el estado
-  useEffect(() => {
-    applyThemeToDOM(isDarkMode);
-  }, [isDarkMode]);
+  const setDarkMode = (value: boolean) => {
+    setIsDarkMode(value);
+  };
 
   return (
     <ThemeContext.Provider value={{ isDarkMode, setDarkMode, isLoading }}>

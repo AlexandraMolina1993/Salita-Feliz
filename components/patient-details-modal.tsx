@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Users, Heart, Calendar, Phone, Mail, MapPin, Eye, AlertCircle, Plus } from "lucide-react"
 import Link from "next/link"
 import type { Patient } from "@/lib/supabase"
+import { formatNominalDate, parseLocalDate } from "@/lib/dateUtils"
 
 interface PatientDetailsModalProps {
   patients: Patient[]
@@ -20,7 +21,8 @@ interface PatientDetailsModalProps {
 export function PatientDetailsModal({ patients, isOpen, onClose, title, description, type }: PatientDetailsModalProps) {
   const calculateAge = (birthDate: string) => {
     const today = new Date()
-    const birth = new Date(birthDate)
+    const birth = parseLocalDate(birthDate)
+    if (!birth) return 0
     let age = today.getFullYear() - birth.getFullYear()
     const monthDiff = today.getMonth() - birth.getMonth()
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
@@ -154,7 +156,7 @@ export function PatientDetailsModal({ patients, isOpen, onClose, title, descript
                           <Calendar className="h-4 w-4 text-purple-500" />
                           <span className="text-gray-600">Nacimiento:</span>
                           <span className="font-medium text-gray-800 text-xs">
-                            {new Date(patient.birth_date).toLocaleDateString("es-AR")}
+                            {formatNominalDate(patient.birth_date)}
                           </span>
                         </div>
 
