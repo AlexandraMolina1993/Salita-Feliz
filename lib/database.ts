@@ -1,5 +1,4 @@
 // lib/database.ts
-import { revalidatePath } from 'next/cache';
 import {
   supabase,
   type Appointment,
