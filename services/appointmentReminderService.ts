@@ -858,82 +858,97 @@ export async function sendPatientEmailNotification(
 
 /**
  * Envía notificación al canal de Telegram y la registra en `notifications`.
+ * Imita la lógica probada de `app/api/send-telegram/route.tsx` utilizando el chat_id numérico oficial.
  */
 export async function sendPatientTelegramNotification(
   patientId: string,
-  recipientChatId: string | undefined,
+  _recipientPhoneOrChatId: string | undefined,
   title: string,
   message: string
 ): Promise<{ success: boolean; logId?: string; error?: string }> {
+  // 1. Sacamos las credenciales de Telegram (Token y Chat ID numérico fijo o por ENV)
   const telegramToken =
-    process.env.TELEGRAM_BOT_TOKEN || '8648904762:AAHqydiTfDPAK9Ly3_vB6K-PrjVKq1TZFR0';
-  const chatId = recipientChatId || process.env.TELEGRAM_CHAT_ID || '688202634';
+    process.env.TELEGRAM_BOT_TOKEN || "8648904762:AAHqydiTfDPAK9Ly3_vB6K-PrjVKq1TZFR0";
+  const telegramChatId = process.env.TELEGRAM_CHAT_ID || "6882902634";
 
-  if (!telegramToken || !chatId) {
-    const err = 'Credenciales de Telegram no configuradas.';
+  if (!telegramToken || !telegramChatId) {
+    const err = "Faltan las credenciales de Telegram en el servidor.";
     const logId = await logPatientNotification({
       patientId,
-      channel: 'TELEGRAM',
+      channel: "TELEGRAM",
       title,
       message: err,
-      status: 'FAILED',
+      status: "FAILED",
       telegramBotToken: telegramToken,
-      telegramChatId: chatId,
+      telegramChatId: telegramChatId,
     });
     return { success: false, logId: logId || undefined, error: err };
   }
 
+  // Logs de depuración en servidor
+  console.log("🔍 [sendPatientTelegramNotification] TOKEN:", telegramToken);
+  console.log("🔍 [sendPatientTelegramNotification] CHAT ID:", telegramChatId);
+
   try {
+    // 2. Enviar el mensaje a la API oficial de Telegram
     const telegramUrl = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
-    const res = await fetch(telegramUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch(telegramUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: telegramChatId,
         text: message,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
       }),
     });
 
-    const data = await res.json();
+    const telegramData = await response.json();
 
-    if (!res.ok || !data.ok) {
-      const errorMsg = `Telegram rechazó el envío: ${JSON.stringify(data)}`;
-      console.error('[PatientNotificationTelegram] Error de API Telegram:', errorMsg);
+    console.log("============== DEBUG TELEGRAM ==============");
+    console.log("Status Code que devolvió Telegram:", response.status);
+    console.log("Respuesta completa:", JSON.stringify(telegramData, null, 2));
+    console.log("============================================");
+
+    if (!response.ok || !telegramData.ok) {
+      const errorMsg = `Telegram rechazó el mensaje: ${JSON.stringify(telegramData)}`;
+      console.error("🔴 Error de Telegram API:", telegramData);
       const logId = await logPatientNotification({
         patientId,
-        channel: 'TELEGRAM',
+        channel: "TELEGRAM",
         title,
-        message,
-        status: 'FAILED',
+        message: errorMsg,
+        status: "FAILED",
         telegramBotToken: telegramToken,
-        telegramChatId: chatId,
+        telegramChatId: telegramChatId,
       });
       return { success: false, logId: logId || undefined, error: errorMsg };
     }
 
+    // 3. Guardar en Supabase asegurando título seguro y estado SENT
+    const asuntoSeguro = title && title.trim() !== "" ? title : "Notificación de Turno";
+
     const logId = await logPatientNotification({
       patientId,
-      channel: 'TELEGRAM',
-      title,
+      channel: "TELEGRAM",
+      title: asuntoSeguro,
       message,
-      status: 'SENT',
+      status: "SENT",
       telegramBotToken: telegramToken,
-      telegramChatId: chatId,
+      telegramChatId: telegramChatId,
     });
 
     return { success: true, logId: logId || undefined };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Error al conectar con Telegram API';
-    console.error('[PatientNotificationTelegram] Excepción:', errorMsg);
+    const errorMsg = error instanceof Error ? error.message : "Error inesperado al conectar con Telegram API";
+    console.error("🔴 CRITICAL ERROR en sendPatientTelegramNotification:", error);
     const logId = await logPatientNotification({
       patientId,
-      channel: 'TELEGRAM',
+      channel: "TELEGRAM",
       title,
-      message,
-      status: 'FAILED',
+      message: `Error: ${errorMsg}`,
+      status: "FAILED",
       telegramBotToken: telegramToken,
-      telegramChatId: chatId,
+      telegramChatId: telegramChatId,
     });
     return { success: false, logId: logId || undefined, error: errorMsg };
   }
@@ -1037,7 +1052,7 @@ export async function run24HourAppointmentReminders(
         dispatchResult.channels.telegram.attempted = true;
         const tgRes = await sendPatientTelegramNotification(
           app.patient_id,
-          undefined,
+          app.patient.phone || undefined,
           aiContent.subject,
           aiContent.chat_message
         );

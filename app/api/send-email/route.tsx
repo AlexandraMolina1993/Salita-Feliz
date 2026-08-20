@@ -1,3 +1,4 @@
+//app/api/send-email/route.tsx
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
@@ -18,38 +19,38 @@ async function getPatientEmail(patientId: string): Promise<string | null> {
     if (!cleanId) return null;
 
     const { data, error } = await supabase
-        .from('patients')    
-        .select('email')     
-        .eq('id', cleanId) 
-        .maybeSingle();       
+        .from('patients')
+        .select('email')
+        .eq('id', cleanId)
+        .maybeSingle();
 
     if (error) {
         console.error("Error en Supabase al buscar el paciente:", error.message);
         return null;
     }
-    return data?.email || null; 
+    return data?.email || null;
 }
 
 // -------------------------------------------------------------
 // 2. HANDLER PRINCIPAL (POST) - CON RESEND Y LOG DIRECTO
 // -------------------------------------------------------------
 export async function POST(req: Request) {
-    let patientEmail: string | null = null; 
-    
+    let patientEmail: string | null = null;
+
     try {
         const body = await req.json();
         const patientId = body.patientId || body.patientID;
         const { subject, message, scheduledDate, scheduledTime } = body;
 
         // Buscamos el correo real en Supabase
-        patientEmail = await getPatientEmail(patientId); 
+        patientEmail = await getPatientEmail(patientId);
 
         if (!patientEmail) {
             return NextResponse.json(
-                { 
+                {
                     error: 'No se encontró el email del paciente.',
-                    details: `La query a Supabase con el ID "${patientId}" devolvió vacío.` 
-                }, 
+                    details: `La query a Supabase con el ID "${patientId}" devolvió vacío.`
+                },
                 { status: 400 }
             );
         }
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
 
         // Enviamos el correo usando la SDK de Resend
         const { data: resendData, error: resendError } = await resend.emails.send({
-            from: 'Salita Feliz <onboarding@resend.dev>', 
+            from: 'Salita Feliz <onboarding@resend.dev>',
             to: patientEmail,
             subject: `Recordatorio de Turno: ${subject}`,
             html: htmlContent,
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
             .from('notifications')
             .insert([
                 {
-                    patient_id: patientId, 
+                    patient_id: patientId,
                     type: 'EMAIL',
                     title: `Recordatorio de Turno: ${subject}`,
                     message: `Turno: ${scheduledDate} a las ${scheduledTime}. Mensaje: ${message}`,
@@ -97,20 +98,20 @@ export async function POST(req: Request) {
         // 🚨 Si las políticas RLS están bien pero las columnas no coinciden, saltará acá:
         if (insertError) {
             console.error("Error de inserción en Supabase:", insertError.message);
-            return NextResponse.json({ 
-                error: 'Email enviado, pero falló el registro en Supabase.', 
-                details: insertError.message 
+            return NextResponse.json({
+                error: 'Email enviado, pero falló el registro en Supabase.',
+                details: insertError.message
             }, { status: 400 });
         }
-        
+
         return NextResponse.json({ message: 'Email enviado con éxito y registrado en Supabase!' }, { status: 200 });
 
     } catch (error) {
         console.error('Error crítico en la API de Resend:', error);
         const errorMessage = error instanceof Error ? error.message : 'Error desconocido en el servidor.';
-        
+
         return NextResponse.json(
-            { error: 'Falló la API de Correo con Resend.', details: errorMessage }, 
+            { error: 'Falló la API de Correo con Resend.', details: errorMessage },
             { status: 500 }
         );
     }

@@ -68,10 +68,10 @@ export async function GET(request: Request) {
  *
  * Flujo:
  * 1. Consulta todos los turnos 'scheduled' para la ventana de las próximas 24 horas.
- * 2. Verifica deduplicación en `ai_notifications_log` para evitar mensajes repetidos.
+ * 2. Verifica deduplicación en `notifications` para evitar mensajes repetidos.
  * 3. Ejecuta el Agente de Redacción con IA (Gemini / OpenAI / Fallback Clínico) para personalizar el mensaje.
  * 4. Despacha por Email (Resend / Gmail SMTP) y Telegram.
- * 5. Registra el contexto del turno de forma inmutable en `ai_notifications_log`.
+ * 5. Registra el contexto del turno de forma inmutable en `notifications`.
  *
  * Body Params opcionales:
  * - `hoursAhead`: number (default: 24)

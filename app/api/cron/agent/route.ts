@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runProactivePatientNotificationEngine } from '@/services/appointmentReminderService';
 import type { RunAppointmentRemindersOptions } from '@/types/appointmentReminder';
+import { runProactiveInventoryEngine } from '@/services/inventoryPredictionService';
 
 /**
- * Endpoint de Cron Seguro para el Agente IA de Notificaciones Proactivas a Pacientes
+ * Endpoint de Cron Seguro para el Agente IA de Notificaciones Proactivas a Pacientes y Control de Stock
  *
  * Flujos automatizados:
  * 1. Recordatorio 24 Horas: Notifica a pacientes con turnos en las próximas 24h.
- * 2. Alerta y Cancelación de Seguridad Clínica: Monitorea stock e inviabilidad de lotes futuros en `v_vaccines_stock`.
+ * 2. Agente Predictivo de Inventario: Monitorea el ritmo de consumo y alerta sobre posibles quiebres de stock.
  *
  * Seguridad:
  * - Valida el header `Authorization: Bearer <CRON_SECRET>` o `x-cron-secret: <CRON_SECRET>` o `?secret=<CRON_SECRET>`.
@@ -16,13 +17,11 @@ import type { RunAppointmentRemindersOptions } from '@/types/appointmentReminder
 function validateCronSecret(request: NextRequest): boolean {
   const configuredSecret = process.env.CRON_SECRET;
 
-  // Si no está configurado el secreto en el servidor, permitir solo en modo de desarrollo con aviso
   if (!configuredSecret) {
-    console.warn('[Cron:PatientNotifications] ADVERTENCIA: CRON_SECRET no está configurado en las variables de entorno.');
+    console.warn('[Cron:Agent] ADVERTENCIA: CRON_SECRET no está configurado en las variables de entorno.');
     return process.env.NODE_ENV === 'development';
   }
 
-  // 1. Verificar header Authorization (Bearer <token>)
   const authHeader = request.headers.get('authorization');
   if (authHeader) {
     const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : authHeader.trim();
@@ -31,13 +30,11 @@ function validateCronSecret(request: NextRequest): boolean {
     }
   }
 
-  // 2. Verificar custom header x-cron-secret
   const customHeader = request.headers.get('x-cron-secret');
   if (customHeader && customHeader.trim() === configuredSecret) {
     return true;
   }
 
-  // 3. Verificar query param ?secret=...
   const { searchParams } = new URL(request.url);
   const querySecret = searchParams.get('secret');
   if (querySecret && querySecret.trim() === configuredSecret) {
@@ -48,14 +45,9 @@ function validateCronSecret(request: NextRequest): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  // 1. Verificación de Seguridad
   if (!validateCronSecret(request)) {
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Unauthorized: Invalid or missing CRON_SECRET.',
-        timestamp: new Date().toISOString(),
-      },
+      { success: false, error: 'Unauthorized: Invalid or missing CRON_SECRET.', timestamp: new Date().toISOString() },
       { status: 401 }
     );
   }
@@ -72,35 +64,40 @@ export async function GET(request: NextRequest) {
       forceResend,
     };
 
-    console.log('[Cron:PatientNotifications] Iniciando ejecución del Agente IA Proactivo...');
-    const result = await runProactivePatientNotificationEngine(options);
+    console.log('[Cron:Agent] Iniciando ejecución de los Agentes IA Proactivos...');
 
-    console.log('[Cron:PatientNotifications] Ejecución finalizada con resumen:', result.summary);
+    // Ejecución concurrente de ambos motores
+    const [patientResult, inventoryResult] = await Promise.all([
+      runProactivePatientNotificationEngine(options),
+      runProactiveInventoryEngine()
+    ]);
 
-    return NextResponse.json(result, { status: result.success ? 200 : 500 });
+    console.log('[Cron:Agent] Resumen Pacientes:', patientResult.summary);
+    console.log('[Cron:Agent] Resumen Inventario:', inventoryResult.summary);
+
+    const allSuccess = patientResult.success && inventoryResult.success;
+
+    return NextResponse.json({
+      success: allSuccess,
+      patients: patientResult,
+      inventory: inventoryResult,
+      timestamp: new Date().toISOString()
+    }, { status: allSuccess ? 200 : 207 }); // 207 significa Multi-Status (si alguno falla pero el otro no)
+
   } catch (error) {
-    console.error('[Cron:PatientNotifications] Error inesperado:', error);
+    console.error('[Cron:Agent] Error inesperado:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-      },
+      { success: false, error: errorMessage, timestamp: new Date().toISOString() },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Verificación de Seguridad
   if (!validateCronSecret(request)) {
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Unauthorized: Invalid or missing CRON_SECRET.',
-        timestamp: new Date().toISOString(),
-      },
+      { success: false, error: 'Unauthorized: Invalid or missing CRON_SECRET.', timestamp: new Date().toISOString() },
       { status: 401 }
     );
   }
@@ -126,19 +123,27 @@ export async function POST(request: NextRequest) {
       specificAppointmentId,
     };
 
-    console.log('[Cron:PatientNotifications (POST)] Ejecutando Agente IA Proactivo...');
-    const result = await runProactivePatientNotificationEngine(options);
+    console.log('[Cron:Agent (POST)] Ejecutando Agentes IA Proactivos...');
 
-    return NextResponse.json(result, { status: result.success ? 200 : 500 });
+    const [patientResult, inventoryResult] = await Promise.all([
+      runProactivePatientNotificationEngine(options),
+      runProactiveInventoryEngine()
+    ]);
+
+    const allSuccess = patientResult.success && inventoryResult.success;
+
+    return NextResponse.json({
+      success: allSuccess,
+      patients: patientResult,
+      inventory: inventoryResult,
+      timestamp: new Date().toISOString()
+    }, { status: allSuccess ? 200 : 207 });
+
   } catch (error) {
-    console.error('[Cron:PatientNotifications (POST)] Error inesperado:', error);
+    console.error('[Cron:Agent (POST)] Error inesperado:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-      },
+      { success: false, error: errorMessage, timestamp: new Date().toISOString() },
       { status: 500 }
     );
   }

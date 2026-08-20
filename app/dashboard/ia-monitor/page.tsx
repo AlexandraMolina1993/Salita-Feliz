@@ -156,10 +156,10 @@ export default function AIMonitorPage() {
   // Suscripción Realtime a Supabase
   useEffect(() => {
     const channel = supabase
-      .channel('ai_notifications_log_changes')
+      .channel('notifications_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'ai_notifications_log' },
+        { event: '*', schema: 'public', table: 'notifications' },
         () => {
           fetchLogs(true);
         }
@@ -668,7 +668,7 @@ export default function AIMonitorPage() {
               <CardTitle className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <span>Bitácora de Auditoría en Tiempo Real</span>
                 <Badge variant="outline" className="font-mono text-xs">
-                  ai_notifications_log ({logs.length})
+                  notifications ({logs.length})
                 </Badge>
               </CardTitle>
               <CardDescription className="text-xs text-gray-600 dark:text-slate-400">

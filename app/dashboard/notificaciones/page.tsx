@@ -1,5 +1,5 @@
 'use client';
-
+// app\dashboard\notificaciones\page.tsx
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,9 +17,9 @@ export default function NotificationsPage() {
     const [selectedPatientId, setSelectedPatientId] = useState('');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
-    const [scheduledDate, setScheduledDate] = useState(''); 
-    const [scheduledTime, setScheduledTime] = useState(''); 
-    
+    const [scheduledDate, setScheduledDate] = useState('');
+    const [scheduledTime, setScheduledTime] = useState('');
+
     const [isLoading, setIsLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -27,10 +27,10 @@ export default function NotificationsPage() {
     useEffect(() => {
         const fetchPatients = async () => {
             try {
-                const data = await getPatients(); 
+                const data = await getPatients();
                 setRecipients(data.map((p: any) => ({
                     id: p.id,
-                    name: p.full_name || p.name, 
+                    name: p.full_name || p.name,
                     email: p.email,
                     phone: p.phone || p.telefono, // Ajusta según el nombre de tu columna en Supabase
                 })));
@@ -53,21 +53,21 @@ export default function NotificationsPage() {
 
         const endpoint = notificationType === 'email' ? '/api/send-email' : '/api/send-telegram';
 
-        const payload = notificationType === 'email' 
+        const payload = notificationType === 'email'
             ? { patientId: selectedPatientId, subject, message, scheduledDate, scheduledTime }
-            : { 
+            : {
                 patientId: selectedPatientId,
                 telefono: selectedPatient?.phone, // 👈 Enviamos el teléfono para Telegram
-                mensaje: `<b>📢 ${subject}</b>\n\n<b>📌 Paciente:</b> ${selectedPatient?.name || 'Asignado'}\n<b>🗓️ Fecha:</b> ${scheduledDate}\n<b>⏰ Hora:</b> ${scheduledTime} hs.\n\n<b>📝 Nota:</b> ${message}` 
-              };
+                mensaje: `<b>📢 ${subject}</b>\n\n<b>📌 Paciente:</b> ${selectedPatient?.name || 'Asignado'}\n<b>🗓️ Fecha:</b> ${scheduledDate}\n<b>⏰ Hora:</b> ${scheduledTime} hs.\n\n<b>📝 Nota:</b> ${message}`
+            };
 
         try {
-            const response = await fetch(endpoint, { 
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            
+
             let data: any;
             try {
                 data = await response.json();
@@ -108,12 +108,12 @@ export default function NotificationsPage() {
                     <CardTitle>Enviar Notificación</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    
+
                     {/* Tipo de Notificación */}
                     <div className="space-y-2">
                         <label className="text-sm font-medium">Tipo de Notificación</label>
-                        <Select 
-                            value={notificationType} 
+                        <Select
+                            value={notificationType}
                             onValueChange={(value) => {
                                 setNotificationType(value as 'email' | 'telegram');
                                 setStatusMessage(null);
@@ -148,16 +148,16 @@ export default function NotificationsPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 {recipients.map((p) => (
-                                    <SelectItem 
-                                        key={p.id} 
-                                        value={p.id} 
+                                    <SelectItem
+                                        key={p.id}
+                                        value={p.id}
                                         disabled={
-                                            (notificationType === 'email' && !p.email) || 
+                                            (notificationType === 'email' && !p.email) ||
                                             (notificationType === 'telegram' && !p.phone)
                                         }
-                                    > 
-                                        {p.name} 
-                                        {notificationType === 'telegram' 
+                                    >
+                                        {p.name}
+                                        {notificationType === 'telegram'
                                             ? (p.phone ? ` (${p.phone})` : ' (Sin Teléfono)')
                                             : (p.email ? `(${p.email})` : ' (Sin Email)')
                                         }
@@ -171,18 +171,18 @@ export default function NotificationsPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-sm font-medium">Fecha del Turno</label>
-                            <Input 
-                                placeholder="Ej: 08-10-2025" 
-                                value={scheduledDate} 
-                                onChange={(e) => setScheduledDate(e.target.value)} 
+                            <Input
+                                placeholder="Ej: 08-10-2025"
+                                value={scheduledDate}
+                                onChange={(e) => setScheduledDate(e.target.value)}
                             />
                         </div>
                         <div>
                             <label className="text-sm font-medium">Hora del Turno</label>
-                            <Input 
-                                placeholder="Ej: 11:30" 
-                                value={scheduledTime} 
-                                onChange={(e) => setScheduledTime(e.target.value)} 
+                            <Input
+                                placeholder="Ej: 11:30"
+                                value={scheduledTime}
+                                onChange={(e) => setScheduledTime(e.target.value)}
                             />
                         </div>
                     </div>
@@ -190,35 +190,34 @@ export default function NotificationsPage() {
                     {/* Asunto */}
                     <div>
                         <label className="text-sm font-medium">Asunto</label>
-                        <Input 
-                            placeholder="Ingrese el asunto" 
-                            value={subject} 
-                            onChange={(e) => setSubject(e.target.value)} 
+                        <Input
+                            placeholder="Ingrese el asunto"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
                         />
                     </div>
 
                     {/* Mensaje */}
                     <div>
                         <label className="text-sm font-medium">Mensaje</label>
-                        <Textarea 
-                            placeholder="Escriba su mensaje aquí" 
+                        <Textarea
+                            placeholder="Escriba su mensaje aquí"
                             rows={4}
                             value={message}
-                            onChange={(e) => setMessage(e.target.value)} 
+                            onChange={(e) => setMessage(e.target.value)}
                         />
                     </div>
-                    
+
                     {/* Botón de Envío */}
-                    <Button 
-                        onClick={handleSendNotification} 
+                    <Button
+                        onClick={handleSendNotification}
                         disabled={isLoading}
-                        className={`w-full text-white transition-colors ${
-                            notificationType === 'email' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-sky-600 hover:bg-sky-700'
-                        }`}
+                        className={`w-full text-white transition-colors ${notificationType === 'email' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-sky-600 hover:bg-sky-700'
+                            }`}
                     >
                         {isLoading ? 'Enviando...' : `Enviar por ${notificationType === 'email' ? 'Email' : 'Telegram'}`}
                     </Button>
-                    
+
                     {/* Mensaje de Estado */}
                     {statusMessage && (
                         <p className={`text-center p-2 rounded text-sm ${statusMessage.startsWith('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -231,11 +230,11 @@ export default function NotificationsPage() {
             {/* Sección Vista Previa Dinámica */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Vista Previa ({notificationType === 'email' ? 'Email' : 'Telegram'})</CardTitle> 
+                    <CardTitle>Vista Previa ({notificationType === 'email' ? 'Email' : 'Telegram'})</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {notificationType === 'email' ? (
-                        <div className="border p-4 rounded-lg bg-gray-50"> 
+                        <div className="border p-4 rounded-lg bg-gray-50">
                             <p className="font-bold text-sm text-gray-700">De: {process.env.EMAIL_FROM || 'Tu Correo Verificado'}</p>
                             <p className="text-xs text-gray-500">Para: {selectedPatient ? `${selectedPatient.name} <${selectedPatient.email}>` : '[Paciente]'}</p>
                             <div className="mt-3 p-3 bg-white rounded-lg shadow-sm border border-gray-200">
@@ -248,8 +247,8 @@ export default function NotificationsPage() {
                         </div>
                     ) : (
                         <div className="border rounded-lg bg-[#f4f4f5] dark:bg-[#18181b] p-4 min-h-[220px] flex flex-col justify-between"
-                             style={{ backgroundImage: "radial-gradient(#cbd5e1 0.6px, transparent 0.6px)", backgroundSize: "12px 12px" }}>
-                            
+                            style={{ backgroundImage: "radial-gradient(#cbd5e1 0.6px, transparent 0.6px)", backgroundSize: "12px 12px" }}>
+
                             <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-zinc-800 mb-3 text-xs">
                                 <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center text-white font-bold text-[11px]">SF</div>
                                 <div>

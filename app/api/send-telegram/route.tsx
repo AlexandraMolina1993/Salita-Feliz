@@ -1,15 +1,16 @@
+//app/api/send-telegram/route.tsx
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 // Inicializamos Supabase para guardar el historial de envío
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "" 
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        
+
         // 🎯 NORMALIZACIÓN: Soportamos si las variables del frontend vienen mezcladas
         const contenidoMensaje = body.mensaje || body.message
         const asuntoMensaje = body.subject || body.title || "Notificación de Turno"
@@ -21,8 +22,8 @@ export async function POST(request: Request) {
         }
 
         // 1. Sacamos las credenciales de Telegram de forma segura
-        const telegramToken ="8648904762:AAHqydiTfDPAK9Ly3_vB6K-PrjVKq1TZFR0"
-        const telegramChatId ="6882902634"
+        const telegramToken = "8648904762:AAHqydiTfDPAK9Ly3_vB6K-PrjVKq1TZFR0"
+        const telegramChatId = "6882902634"
 
         if (!telegramToken || !telegramChatId) {
             return NextResponse.json({ error: "Faltan las variables de entorno de Telegram en el servidor." }, { status: 500 })
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
                     type: "TELEGRAM",
                     title: asuntoSeguro,
                     message: contenidoMensaje,
-                    status: "SENT", 
+                    status: "SENT",
                     patient_id: pacienteId,
                     telegram_bot_token: telegramToken,
                     telegram_chat_id: telegramChatId

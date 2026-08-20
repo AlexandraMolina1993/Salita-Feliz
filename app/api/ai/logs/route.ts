@@ -13,12 +13,16 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
 
     let query = supabase
-      .from('ai_notifications_log')
+      .from('notifications')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (channel && channel !== 'ALL') {
-      query = query.eq('channel', channel.toUpperCase());
+      if (channel === 'TELEGRAM') {
+        query = query.or('type.ilike.%TELEGRAM%,telegram_chat_id.not.is.null');
+      } else if (channel === 'GMAIL' || channel === 'EMAIL') {
+        query = query.or('type.ilike.%EMAIL%,type.ilike.%GMAIL%');
+      }
     }
 
     if (status && status !== 'ALL') {
@@ -27,16 +31,15 @@ export async function GET(request: Request) {
 
     if (search && search.trim()) {
       const term = `%${search.trim()}%`;
-      query = query.or(`recipient.ilike.${term},message.ilike.${term}`);
+      query = query.or(`title.ilike.${term},message.ilike.${term}`);
     }
 
     query = query.range(offset, offset + limit - 1);
 
-    const { data: logs, error, count } = await query;
+    const { data: rawData, error, count } = await query;
 
     if (error) {
-      console.warn('[API /api/ai/logs] Error al consultar ai_notifications_log:', error.message);
-      // Si la tabla no existe aún o hay un error, devolver array vacío con estadísticas en 0 para no romper la UI
+      console.warn('[API /api/ai/logs] Error al consultar tabla notifications:', error.message);
       return NextResponse.json({
         success: true,
         data: [],
@@ -56,32 +59,71 @@ export async function GET(request: Request) {
       });
     }
 
-    // Consulta de estadísticas generales agregadas
-    const { data: allLogs } = await supabase
-      .from('ai_notifications_log')
-      .select('channel, status, context, created_at')
+    const logs = (rawData || []).map((n: any) => {
+      const isTelegram = (n.type || '').toUpperCase().includes('TELEGRAM') || Boolean(n.telegram_chat_id);
+      const channelType = isTelegram ? 'TELEGRAM' : 'GMAIL';
+      const recipient = n.telegram_chat_id 
+        ? `Telegram Chat: ${n.telegram_chat_id}` 
+        : (n.patient_id ? `Paciente ID: ${n.patient_id}` : 'Administrador');
+
+      let contextType = 'SYSTEM_NOTIFICATION';
+      const titleLower = (n.title || '').toLowerCase();
+      if (titleLower.includes('recordatorio') || titleLower.includes('turno')) {
+        contextType = 'APPOINTMENT_REMINDER_24H';
+      } else if (titleLower.includes('stock') || titleLower.includes('inventario') || titleLower.includes('agotamiento')) {
+        contextType = 'PREDICTIVE_STOCK_ALERT';
+      } else if (titleLower.includes('cancelac')) {
+        contextType = 'CLINICAL_CANCELLATION';
+      }
+
+      return {
+        id: n.id,
+        channel: channelType,
+        recipient,
+        message: n.message || n.title || '',
+        status: (n.status || 'SENT').toUpperCase(),
+        context: {
+          type: contextType,
+          title: n.title,
+          patient_id: n.patient_id,
+          telegram_chat_id: n.telegram_chat_id,
+        },
+        error_detail: n.status === 'FAILED' ? n.message : null,
+        created_at: n.created_at,
+        sent_at: n.sent_at || n.created_at,
+      };
+    });
+
+    // Consulta de estadísticas generales agregadas desde la tabla notifications
+    const { data: allData } = await supabase
+      .from('notifications')
+      .select('type, status, title, telegram_chat_id, created_at')
       .limit(1000);
 
-    const rawList = allLogs || [];
+    const rawList = allData || [];
     const totalCount = rawList.length;
-    const sentCount = rawList.filter((l) => l.status === 'SENT').length;
-    const failedCount = rawList.filter((l) => l.status === 'FAILED').length;
-    const pendingCount = rawList.filter((l) => l.status === 'PENDING').length;
-    const telegramCount = rawList.filter((l) => l.channel === 'TELEGRAM').length;
-    const gmailCount = rawList.filter((l) => l.channel === 'GMAIL').length;
+    const sentCount = rawList.filter((l) => (l.status || '').toUpperCase() === 'SENT').length;
+    const failedCount = rawList.filter((l) => (l.status || '').toUpperCase() === 'FAILED').length;
+    const pendingCount = rawList.filter((l) => (l.status || '').toUpperCase() === 'PENDING').length;
+    const telegramCount = rawList.filter(
+      (l) => (l.type || '').toUpperCase().includes('TELEGRAM') || Boolean(l.telegram_chat_id)
+    ).length;
+    const gmailCount = rawList.filter(
+      (l) => (l.type || '').toUpperCase().includes('EMAIL') || (l.type || '').toUpperCase().includes('GMAIL') || !(l.type || '').toUpperCase().includes('TELEGRAM')
+    ).length;
     const successRate = totalCount > 0 ? Math.round((sentCount / totalCount) * 100) : 100;
 
     const appointmentRemindersCount = rawList.filter(
-      (l) => (l.context as any)?.type === 'APPOINTMENT_REMINDER_24H'
+      (l) => (l.title || '').toLowerCase().includes('recordatorio') || (l.title || '').toLowerCase().includes('turno')
     ).length;
     const stockAlertsCount = rawList.filter(
-      (l) => (l.context as any)?.type === 'PREDICTIVE_STOCK_ALERT'
+      (l) => (l.title || '').toLowerCase().includes('stock') || (l.title || '').toLowerCase().includes('inventario')
     ).length;
 
     return NextResponse.json({
       success: true,
-      data: logs || [],
-      total: count || (logs?.length ?? 0),
+      data: logs,
+      total: count || logs.length,
       stats: {
         total: totalCount,
         sent: sentCount,
@@ -99,7 +141,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: err?.message || 'Error interno al consultar logs de auditoría.',
+        error: err?.message || 'Error interno al consultar logs de notificaciones.',
       },
       { status: 500 }
     );

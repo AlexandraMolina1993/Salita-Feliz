@@ -148,7 +148,7 @@ export interface StockRunRateAnalysis {
 }
 
 /**
- * Registro de auditoría para la tabla `ai_notifications_log`.
+ * Registro de auditoría para la tabla `notifications`.
  */
 export interface AINotificationRecord {
   id?: string;

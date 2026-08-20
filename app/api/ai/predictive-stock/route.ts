@@ -46,7 +46,7 @@ export async function GET(request: Request) {
  * 1. Análisis de Run-Rate sobre stock_movements.
  * 2. Generación de alerta clínica contextual (Google Gemini / OpenAI / Fallback Clínico).
  * 3. Despacho a Telegram Bot API y Nodemailer (Gmail / SMTP / Resend).
- * 4. Registro inmutable en la tabla de auditoría `ai_notifications_log`.
+ * 4. Registro inmutable en la tabla de auditoría `notifications`.
  */
 export async function POST(request: Request) {
   try {

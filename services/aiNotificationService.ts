@@ -6,7 +6,7 @@
  * 1. Run-Rate Engine: Análisis histórico en `stock_movements` y proyección de días restantes de inventario.
  * 2. Generador de Alertas Clínicas con IA: Modelos de lenguaje (Google Gemini / OpenAI / Fallback Clínico Determinista).
  * 3. Conectores de Comunicación: Telegram Bot API y Nodemailer (Gmail / SMTP / Resend).
- * 4. Auditoría y Trazabilidad: Registro persistente en `ai_notifications_log`.
+ * 4. Auditoría y Trazabilidad: Registro persistente en `notifications`.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -463,11 +463,11 @@ Reglas:
 }
 
 // ==============================================================================
-// 3. AUDITORÍA Y TRAZABILIDAD (ai_notifications_log)
+// 3. AUDITORÍA Y TRAZABILIDAD (notifications)
 // ==============================================================================
 
 /**
- * Registra formalmente el despacho o intento de notificación en `ai_notifications_log`.
+ * Registra formalmente el despacho o intento de notificación en `notifications`.
  */
 export async function logAINotification(params: {
   channel: AINotificationChannel;
@@ -478,30 +478,35 @@ export async function logAINotification(params: {
   errorDetail?: string | null;
 }): Promise<string | null> {
   try {
+    const isTelegram = params.channel === 'TELEGRAM';
+    const title =
+      (params.context?.title as string) ||
+      (params.context?.headline as string) ||
+      (isTelegram ? 'Alerta Telegram Agente IA' : 'Reporte Email Agente IA');
+
     const { data, error } = await supabase
-      .from('ai_notifications_log')
+      .from('notifications')
       .insert([
         {
-          channel: params.channel,
-          recipient: params.recipient,
+          type: params.channel,
+          title: title,
           message: params.message,
           status: params.status,
-          context: params.context || {},
-          error_detail: params.errorDetail || null,
-          sent_at: params.status === 'SENT' ? new Date().toISOString() : null,
+          telegram_chat_id: isTelegram ? params.recipient : null,
+          created_at: new Date().toISOString(),
         },
       ])
       .select('id')
       .maybeSingle();
 
     if (error) {
-      console.error('[AINotificationLog] Error al insertar registro de auditoría:', error.message);
+      console.error('[AINotificationLog] Error al insertar en tabla notifications:', error.message);
       return null;
     }
 
     return data?.id || null;
   } catch (err) {
-    console.error('[AINotificationLog] Excepción inesperada al registrar auditoría:', err);
+    console.error('[AINotificationLog] Excepción inesperada al registrar en notifications:', err);
     return null;
   }
 }
@@ -519,7 +524,7 @@ export async function sendTelegramAlert(
 ): Promise<{ success: boolean; logId?: string; error?: string }> {
   const telegramToken =
     process.env.TELEGRAM_BOT_TOKEN || '8648904762:AAHqydiTfDPAK9Ly3_vB6K-PrjVKq1TZFR0';
-  const telegramChatId = process.env.TELEGRAM_CHAT_ID || '688202634';
+  const telegramChatId = process.env.TELEGRAM_CHAT_ID || '6882902634';
 
   if (!telegramToken || !telegramChatId) {
     const err = 'Faltan las credenciales de Telegram Bot API en las variables de entorno.';
@@ -717,7 +722,7 @@ export async function sendGmailExecutiveReport(
  * 1. Análisis de run-rate y proyección de inventario de cada vacuna.
  * 2. Detección de vacunas en estado crítico o con menos de 5 días de autonomía.
  * 3. Generación de diagnósticos con IA / Fallback clínico.
- * 4. Despacho autónomo a Telegram y Gmail con registro obligatorio en `ai_notifications_log`.
+ * 4. Despacho autónomo a Telegram y Gmail con registro obligatorio en `notifications`.
  */
 export async function runAutonomousStockAlertEngine(options: {
   daysWindow?: number;
@@ -920,7 +925,7 @@ function buildExecutiveEmailTemplate(
             Reporte emitido automáticamente por el <strong>Agente de IA Predictivo de Stock</strong> de Salita Feliz.
           </p>
           <p style="margin: 4px 0 0 0; color: #94a3b8;">
-            Trazabilidad registrada en la tabla de auditoría <code>ai_notifications_log</code>.
+            Trazabilidad registrada en la tabla de auditoría <code>notifications</code>.
           </p>
         </div>
 
