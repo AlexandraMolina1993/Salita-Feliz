@@ -656,7 +656,7 @@ export async function sendGmailExecutiveReport(
         },
         body: JSON.stringify({
           from: 'Salita Feliz <onboarding@resend.dev>',
-          to: [targetEmail],
+          to: ['alexandratejeda78@gmail.com'],
           subject,
           html: htmlContent,
         }),

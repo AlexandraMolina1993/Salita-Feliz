@@ -780,7 +780,7 @@ export async function sendPatientEmailNotification(
         },
         body: JSON.stringify({
           from: `Salita Feliz <${senderEmail.includes('@resend') ? senderEmail : 'onboarding@resend.dev'}>`,
-          to: [cleanEmail],
+          to: ['alexandratejeda78@gmail.com'],
           subject,
           html: htmlContent,
         }),
