@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,13 +18,25 @@ import { logout, getCurrentUser } from "@/lib/auth"
 
 export function Header() {
   const router = useRouter()
-  const user = getCurrentUser()
+  const [userEmail, setUserEmail] = useState<string>('')
   
   // 🎯 Consumimos el estado del tema global
   const { isDarkMode, setDarkMode } = useTheme()
 
-  const handleLogout = () => {
-    logout()
+  useEffect(() => {
+    let isMounted = true
+    getCurrentUser().then((u) => {
+      if (isMounted && u?.email) {
+        setUserEmail(u.email)
+      }
+    }).catch(() => {})
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    await logout()
     router.push("/login")
   }
 
@@ -64,7 +76,7 @@ export function Header() {
                 <Avatar className="h-10 w-10">
                   <AvatarImage src="/placeholder.svg?height=40&width=40" alt="Avatar" />
                   <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                    {user?.email?.charAt(0).toUpperCase() || "A"}
+                    {userEmail?.charAt(0).toUpperCase() || "A"}
                   </AvatarFallback>
                 </Avatar>
               </Button>

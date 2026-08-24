@@ -1,11 +1,10 @@
 // components/replenishment-schedule-list.tsx
 import { Package, Calendar, AlertTriangle, CheckCircle, Clock } from "lucide-react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { formatNominalDate, parseLocalDate } from "@/lib/dateUtils";
 
 // Asume que la interfaz ReplenishmentSchedule está definida en lib/database
 interface ReplenishmentSchedule {
@@ -56,7 +55,11 @@ export function ReplenishmentScheduleList({ schedules }: ReplenishmentScheduleLi
     // Filtramos para mostrar solo las pendientes y ordenamos por fecha
     const pendingSchedules = schedules
         .filter(s => s.status === 'pending')
-        .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime());
+        .sort((a, b) => {
+            const timeA = parseLocalDate(a.scheduled_date)?.getTime() ?? 0;
+            const timeB = parseLocalDate(b.scheduled_date)?.getTime() ?? 0;
+            return timeA - timeB;
+        });
     
     // Mostramos todas las reposiciones, incluyendo recibidas y canceladas, después de las pendientes.
     const historicalSchedules = schedules
@@ -85,9 +88,7 @@ export function ReplenishmentScheduleList({ schedules }: ReplenishmentScheduleLi
                                 <h3 className="text-lg font-semibold border-b pb-1">Próximas Entregas ({pendingSchedules.length})</h3>
                                 {pendingSchedules.map((schedule) => {
                                     const { text, className, icon: Icon } = getStatusBadge(schedule.status);
-                                    
-                                    // Usar el ajuste de 'T12:00:00' para que la fecha se muestre correctamente en la zona horaria local
-                                    const formattedDate = format(new Date(schedule.scheduled_date + 'T12:00:00'), 'PPP', { locale: es });
+                                    const formattedDate = formatNominalDate(schedule.scheduled_date, 'medium');
                                     
                                     return (
                                         <div key={schedule.id} className="flex items-center justify-between p-3 rounded-lg bg-yellow-50 border border-yellow-200 hover:bg-yellow-100 transition-colors">
@@ -120,7 +121,7 @@ export function ReplenishmentScheduleList({ schedules }: ReplenishmentScheduleLi
                                 <h3 className="text-lg font-semibold border-b pb-1">Historial ({historicalSchedules.length})</h3>
                                 {historicalSchedules.slice(0, 5).map((schedule) => {
                                     const { text, className, icon: Icon } = getStatusBadge(schedule.status);
-                                    const formattedDate = format(new Date(schedule.scheduled_date + 'T12:00:00'), 'PPP', { locale: es });
+                                    const formattedDate = formatNominalDate(schedule.scheduled_date, 'medium');
                                     
                                     return (
                                         <div key={schedule.id} className="flex items-center justify-between text-sm text-muted-foreground">

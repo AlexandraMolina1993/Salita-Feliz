@@ -50,30 +50,36 @@ export default function AdminRegisterPage() {
         setError(null)
         setSuccess(false)
 
-        // 🚨 ENVIAR TODOS LOS CAMPOS AL BACKEND
-        const { success, error } = await signupAdmin({ 
-            name, 
-            email, 
-            password, 
-            phone, 
-            idNumber, 
-            address, 
-            birthDate, 
-            gender, 
-            hireDate, 
-            emergencyContactName, 
-            emergencyContactPhone 
-        });
+        try {
+            // 🚨 ENVIAR TODOS LOS CAMPOS AL BACKEND
+            const { success, error } = await signupAdmin({ 
+                name, 
+                email, 
+                password, 
+                phone, 
+                idNumber, 
+                address, 
+                birthDate, 
+                gender, 
+                hireDate, 
+                emergencyContactName, 
+                emergencyContactPhone 
+            });
 
-        if (success) {
-            setSuccess(true);
-            setTimeout(() => {
-                router.push('/login');
-            }, 3000);
-        } else {
-            setError(error || "Error desconocido al registrar el administrador.");
+            if (success) {
+                setSuccess(true);
+                setTimeout(() => {
+                    router.push('/login');
+                }, 3000);
+            } else {
+                setError(error || "Error desconocido al registrar el administrador.");
+            }
+        } catch (err: any) {
+            console.error("Error al registrar administrador:", err);
+            setError(err?.message || "Error al procesar el registro.");
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false)
     }
 
     // Si el registro fue exitoso, muestra un mensaje de éxito

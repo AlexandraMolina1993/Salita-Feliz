@@ -166,35 +166,71 @@ export async function updateAdminProfile( // <-- Función que faltaba (y tiene e
 /**
  * Inicia sesión con email y contraseña.
  */
-export async function login(email: string, password: string): Promise<boolean> {
-    const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-    });
-    return !error;
+export async function login(
+  email: string, 
+  password: string
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
+      console.error("[Auth] Error en signInWithPassword:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("[Auth] Excepción inesperada en login:", err);
+    return { 
+      success: false, 
+      error: err?.message || "Error al conectar con el servidor de autenticación." 
+    };
+  }
 }
 
 /**
- * Cierra la sesión del usuario.
- */
+ * Cierra la sesión del usuario.
+ */
 export async function logout(): Promise<void> {
-    await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error("[Auth] Error al cerrar sesión:", err);
+  }
 }
 
 /**
- * Verifica si hay una sesión activa.
- */
+ * Verifica si hay una sesión activa.
+ */
 export async function isAuthenticated(): Promise<boolean> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return !!session;
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn("[Auth] Error al verificar sesión:", error);
+      return false;
+    }
+    return !!session;
+  } catch (err) {
+    console.error("[Auth] Excepción al verificar autenticación:", err);
+    return false;
+  }
 }
 
 /**
- * Obtiene el email del usuario actual.
- */
+ * Obtiene el email del usuario actual.
+ */
 export async function getCurrentUser(): Promise<{ email: string } | null> {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user ? { email: user.email || '' } : null;
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    return { email: user.email || '' };
+  } catch (err) {
+    console.error("[Auth] Error al obtener usuario actual:", err);
+    return null;
+  }
 }
 /**
  * Solicita el restablecimiento de contraseña para el email proporcionado.

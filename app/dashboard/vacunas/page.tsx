@@ -11,7 +11,7 @@ import Link from "next/link"
 import { getVaccinesStockAction, getVaccineStatsAction, type ExtendedVaccineItem } from "@/app/actions/vaccines"
 import { getVaccines, getVaccineStats, type Vaccine } from "@/lib/database"
 import { VaccineDetailsModal } from "@/components/vaccine-details-modal"
-import { VaccineTypeModal } from "@/components/vaccine-type-modal"
+import { formatNominalDate, isVaccineExpiringSoon as isExpiringSoon, isVaccineExpired as isExpired } from "@/lib/dateUtils"
 
 export default function VacunasPage() {
   const [vaccines, setVaccines] = useState<ExtendedVaccineItem[]>([])
@@ -71,9 +71,9 @@ export default function VacunasPage() {
 
   const loadVaccinesList = async () => {
     try {
-      // 1. Intentar Server Action exclusivo de la vista v_vaccines_stock
+      // 1. Consultar a través del Server Action de balance dinámico
       const data = await getVaccinesStockAction()
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         setVaccines(data)
         return
       }
@@ -84,9 +84,10 @@ export default function VacunasPage() {
     try {
       // Fallback a getVaccines()
       const fallbackData = await getVaccines()
-      setVaccines(fallbackData as any[])
+      setVaccines((fallbackData as any[]) || [])
     } catch (error) {
       console.error("Error loading vaccines:", error)
+      setVaccines([])
     }
   }
 
@@ -103,7 +104,9 @@ export default function VacunasPage() {
 
     try {
       const fallbackStats = await getVaccineStats()
-      setVaccineStats((prev) => ({ ...prev, ...(fallbackStats as any) }))
+      if (fallbackStats) {
+        setVaccineStats((prev) => ({ ...prev, ...(fallbackStats as any) }))
+      }
     } catch (error) {
       console.error("Error loading vaccine stats:", error)
     }
@@ -173,21 +176,6 @@ export default function VacunasPage() {
     }
   }
 
-  const isExpiringSoon = (fechaVencimiento?: string | null) => {
-    if (!fechaVencimiento) return false
-    const today = new Date()
-    const expDate = new Date(fechaVencimiento)
-    const diffTime = expDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays <= 30 && diffDays > 0
-  }
-
-  const isExpired = (fechaVencimiento?: string | null) => {
-    if (!fechaVencimiento) return false
-    const today = new Date()
-    const expDate = new Date(fechaVencimiento)
-    return expDate < today
-  }
 
   if (loading) {
     return (
@@ -418,7 +406,7 @@ export default function VacunasPage() {
                               : "text-green-700"
                         }`}
                       >
-                        {new Date(vaccine.expiration_date).toLocaleDateString()}
+                        {formatNominalDate(vaccine.expiration_date)}
                       </span>
                     </div>
                   )}

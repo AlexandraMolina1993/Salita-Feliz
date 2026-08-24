@@ -5,14 +5,19 @@
  * Salita Feliz - Enterprise Healthcare System
  */
 
+import { revalidatePath } from 'next/cache';
 import { supabase } from '@/lib/supabase';
 import type { VaccineStockView, VaccineStockStatus } from '@/types/vaccine';
 import type { Vaccine } from '@/lib/supabase';
 
 export interface ExtendedVaccineItem extends Vaccine {
+  id: string;
+  vaccine_id?: string;
+  laboratory?: string;
   physical_vials: number;
   physical_vials_for_repos: number;
   current_stock_fraction: number;
+  current_stock_vials: number;
   total_ml: number;
   current_stock_ml: number;
   available_doses_for_clinic: number;
@@ -52,27 +57,7 @@ export interface UpdateVaccineInput {
   stock_quantity?: number | string; // Cantidad deseada de viales físicos
 }
 
-/**
- * Helper to check if a date is within 30 days
- */
-function isExpiringSoon(expirationDate?: string | null): boolean {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  const diffTime = expDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays <= 30 && diffDays > 0;
-}
-
-/**
- * Helper to check if a date is past today
- */
-function isExpired(expirationDate?: string | null): boolean {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  return expDate < today;
-}
+import { formatDateToISO, isVaccineExpiringSoon as isExpiringSoon, isVaccineExpired as isExpired } from '@/lib/dateUtils';
 
 /**
  * Server Action: Obtiene la lista completa de vacunas con su stock en tiempo real
@@ -87,14 +72,14 @@ export async function getVaccinesStockAction(): Promise<ExtendedVaccineItem[]> {
       .order('name', { ascending: true });
 
     if (stockErr) {
-      console.error('[VaccineAction] Error al consultar v_vaccines_stock:', stockErr);
-      throw new Error(`Error en vista v_vaccines_stock: ${stockErr.message}`);
+      console.warn('[VaccineAction] Error al consultar v_vaccines_stock, usando fallback de tabla vaccines:', stockErr.message);
     }
 
-    // 2. Consultar metadatos adicionales (lote, precio, temperatura, proveedor, vía) desde tabla base vaccines
+    // 2. Consultar metadatos adicionales desde tabla base vaccines
     const { data: rawVaccines } = await supabase
       .from('vaccines')
-      .select('*');
+      .select('*')
+      .order('name', { ascending: true });
 
     const rawMap = new Map<string, any>();
     if (rawVaccines) {
@@ -103,68 +88,113 @@ export async function getVaccinesStockAction(): Promise<ExtendedVaccineItem[]> {
       });
     }
 
-    const list = (vStock || []).map((item: any) => {
-      const raw = rawMap.get(item.vaccine_id) || {};
-      const doseAmount = Number(item.dose_amount ?? raw.dose_amount) || 0.5;
-      const netContent = Number(item.net_content ?? raw.net_content) || 5.0;
-      const fraction = Number(item.current_stock_fraction ?? item.current_stock_vials ?? 0);
-      const physicalVials = Number(
-        item.physical_vials ?? 
-        item.current_stock_vials ?? 
-        item.physical_vials_for_repos ?? 
-        Math.ceil(fraction)
-      );
-      const totalMl = Number(item.total_ml ?? item.current_stock_ml) || (fraction * netContent);
-      const availableDoses = Number(item.available_doses_for_clinic) || Math.floor(totalMl / doseAmount);
-      const minStock = Number(item.min_stock_level ?? raw.min_stock_level) || 10;
-      
-      let stockStatus: VaccineStockStatus = item.stock_status;
-      if (!stockStatus) {
-        if (fraction <= 0 || physicalVials <= 0) {
-          stockStatus = 'OUT_OF_STOCK';
-        } else if (physicalVials <= minStock) {
-          stockStatus = 'CRITICAL_LOW';
-        } else {
-          stockStatus = 'OPTIMAL';
+    // Si v_vaccines_stock tiene datos, usarlos mapeados con raw
+    if (vStock && vStock.length > 0) {
+      return vStock.map((item: any) => {
+        const raw = rawMap.get(item.vaccine_id) || {};
+        const doseAmount = Number(item.dose_amount ?? raw.dose_amount) || 0.5;
+        const netContent = Number(item.net_content ?? raw.net_content) || 5.0;
+        const fraction = Number(item.current_stock_fraction ?? item.current_stock_vials ?? 0);
+        const physicalVials = Number(
+          item.physical_vials ?? 
+          item.current_stock_vials ?? 
+          item.physical_vials_for_repos ?? 
+          Math.ceil(fraction)
+        );
+        const totalMl = Number(item.total_ml ?? item.current_stock_ml) || (fraction * netContent);
+        const availableDoses = Number(item.available_doses_for_clinic) || Math.floor(totalMl / doseAmount);
+        const minStock = Number(item.min_stock_level ?? raw.min_stock_level) || 10;
+        
+        let stockStatus: VaccineStockStatus = item.stock_status;
+        if (!stockStatus) {
+          if (fraction <= 0 || physicalVials <= 0) {
+            stockStatus = 'OUT_OF_STOCK';
+          } else if (physicalVials <= minStock) {
+            stockStatus = 'CRITICAL_LOW';
+          } else {
+            stockStatus = 'OPTIMAL';
+          }
         }
-      }
 
-      return {
-        id: item.vaccine_id,
-        vaccine_id: item.vaccine_id,
-        name: item.name,
-        manufacturer: item.laboratory || raw.manufacturer || 'Laboratorio',
-        laboratory: item.laboratory || raw.manufacturer || 'Laboratorio',
-        supplier: raw.supplier || '',
-        administration_route: raw.administration_route || 'Intramuscular (IM)',
-        type: item.type || raw.type || 'General',
-        dose_amount: doseAmount,
-        net_content: netContent,
-        min_stock_level: minStock,
-        storage_temperature: raw.storage_temperature || '2°C a 8°C',
-        lot_number: raw.lot_number || 'LOTE-GENERAL',
-        price: raw.price ? Number(raw.price) : undefined,
-        expiration_date: item.expiration_date || raw.expiration_date || null,
-        is_active: item.is_active !== undefined ? Boolean(item.is_active) : (raw.is_active !== undefined ? Boolean(raw.is_active) : true),
-        // Stock Ledger Mapping
-        stock_quantity: physicalVials,
-        physical_vials: physicalVials,
-        physical_vials_for_repos: physicalVials,
-        current_stock_vials: physicalVials,
-        current_stock_fraction: fraction,
-        total_ml: Number(totalMl.toFixed(2)),
-        current_stock_ml: Number(totalMl.toFixed(2)),
-        available_doses_for_clinic: availableDoses,
-        stock_status: stockStatus,
-        created_at: raw.created_at,
-        updated_at: raw.updated_at,
-      } as ExtendedVaccineItem;
-    });
+        return {
+          id: item.vaccine_id,
+          vaccine_id: item.vaccine_id,
+          name: item.name,
+          manufacturer: item.laboratory || raw.manufacturer || 'Laboratorio',
+          laboratory: item.laboratory || raw.manufacturer || 'Laboratorio',
+          supplier: raw.supplier || '',
+          administration_route: raw.administration_route || 'Intramuscular (IM)',
+          type: item.type || raw.type || 'General',
+          dose_amount: doseAmount,
+          net_content: netContent,
+          min_stock_level: minStock,
+          storage_temperature: raw.storage_temperature || '2°C a 8°C',
+          lot_number: raw.lot_number || 'LOTE-GENERAL',
+          price: raw.price ? Number(raw.price) : undefined,
+          expiration_date: item.expiration_date || raw.expiration_date || null,
+          is_active: item.is_active !== undefined ? Boolean(item.is_active) : (raw.is_active !== undefined ? Boolean(raw.is_active) : true),
+          stock_quantity: physicalVials,
+          physical_vials: physicalVials,
+          physical_vials_for_repos: physicalVials,
+          current_stock_vials: physicalVials,
+          current_stock_fraction: fraction,
+          total_ml: Number(totalMl.toFixed(2)),
+          current_stock_ml: Number(totalMl.toFixed(2)),
+          available_doses_for_clinic: availableDoses,
+          stock_status: stockStatus,
+          created_at: raw.created_at,
+          updated_at: raw.updated_at,
+        } as ExtendedVaccineItem;
+      });
+    }
 
-    return list;
+    // Fallback si la vista no tiene registros pero la tabla vaccines sí
+    if (rawVaccines && rawVaccines.length > 0) {
+      return rawVaccines.map((raw: any) => {
+        const doseAmount = Number(raw.dose_amount) || 0.5;
+        const netContent = Number(raw.net_content) || 5.0;
+        const physicalVials = Number(raw.stock_quantity) || 0;
+        const totalMl = physicalVials * netContent;
+        const availableDoses = Math.floor(totalMl / doseAmount);
+        const minStock = Number(raw.min_stock_level) || 10;
+        const stockStatus: VaccineStockStatus = physicalVials <= 0 ? 'OUT_OF_STOCK' : physicalVials <= minStock ? 'CRITICAL_LOW' : 'OPTIMAL';
+
+        return {
+          id: raw.id,
+          vaccine_id: raw.id,
+          name: raw.name,
+          manufacturer: raw.manufacturer || 'Laboratorio',
+          laboratory: raw.manufacturer || 'Laboratorio',
+          supplier: raw.supplier || '',
+          administration_route: raw.administration_route || 'Intramuscular (IM)',
+          type: raw.type || 'General',
+          dose_amount: doseAmount,
+          net_content: netContent,
+          min_stock_level: minStock,
+          storage_temperature: raw.storage_temperature || '2°C a 8°C',
+          lot_number: raw.lot_number || 'LOTE-GENERAL',
+          price: raw.price ? Number(raw.price) : undefined,
+          expiration_date: raw.expiration_date || null,
+          is_active: raw.is_active !== undefined ? Boolean(raw.is_active) : true,
+          stock_quantity: physicalVials,
+          physical_vials: physicalVials,
+          physical_vials_for_repos: physicalVials,
+          current_stock_vials: physicalVials,
+          current_stock_fraction: physicalVials,
+          total_ml: Number(totalMl.toFixed(2)),
+          current_stock_ml: Number(totalMl.toFixed(2)),
+          available_doses_for_clinic: availableDoses,
+          stock_status: stockStatus,
+          created_at: raw.created_at,
+          updated_at: raw.updated_at,
+        } as ExtendedVaccineItem;
+      });
+    }
+
+    return [];
   } catch (error) {
     console.error('[VaccineAction] getVaccinesStockAction falló:', error);
-    throw error;
+    return [];
   }
 }
 
@@ -495,4 +525,284 @@ export async function getVaccinationRhythmAction(days: number = 30): Promise<Vac
     };
   }
 }
+
+export interface AddStockInput {
+  vaccineId: string;
+  quantityVials: number;
+  lotNumber?: string | null;
+  expirationDate?: string | Date | null;
+  notes?: string | null;
+}
+
+/**
+ * Server Action 1: Añadir Stock (Viales Físicos)
+ * - Inserta un movimiento 'REPLENISHMENT' (con dirección IN) en la tabla inmutable `stock_movements`.
+ * - Sincroniza metadatos de lote y fecha de vencimiento en `vaccines`.
+ * - Invalida la caché de Next.js para que la vista `v_vaccines_stock` se actualice de inmediato en UI.
+ */
+export async function addVaccineStockAction(input: AddStockInput): Promise<ExtendedVaccineItem | null> {
+  const { vaccineId, quantityVials, lotNumber, expirationDate, notes } = input;
+  
+  if (!vaccineId) {
+    throw new Error('ID de vacuna requerido para añadir stock.');
+  }
+
+  const vials = Number(quantityVials);
+  if (isNaN(vials) || vials <= 0) {
+    throw new Error('La cantidad de viales a ingresar debe ser mayor a 0.');
+  }
+
+  try {
+    const formattedExpDate = expirationDate ? (formatDateToISO(expirationDate) || null) : null;
+
+    // 1. Insertar movimiento inmutable en stock_movements (tipo REPLENISHMENT, dirección IN)
+    const { data: movement, error: movError } = await supabase
+      .from('stock_movements')
+      .insert([
+        {
+          vaccine_id: vaccineId,
+          type: 'REPLENISHMENT',
+          quantity_vials: Math.abs(vials),
+          description: `Ingreso de stock (IN): +${vials} viales${lotNumber ? ` | Lote: ${lotNumber}` : ''}`,
+          metadata: {
+            direction: 'IN',
+            action: 'ADD_STOCK',
+            quantity_vials: vials,
+            lot_number: lotNumber || null,
+            expiration_date: formattedExpDate,
+            notes: notes || null,
+            source: 'quick_action_add_stock',
+            added_at: new Date().toISOString(),
+          },
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single();
+
+    if (movError) {
+      console.error('[VaccineAction] Error al registrar movimiento en stock_movements:', movError);
+      throw new Error(`Error al registrar en stock_movements: ${movError.message}`);
+    }
+
+    // 2. Si se especificó un nuevo lote o fecha de vencimiento, actualizar metadatos en la tabla `vaccines`
+    const metaUpdates: Record<string, any> = {};
+    if (lotNumber && lotNumber.trim() !== '') {
+      metaUpdates.lot_number = lotNumber.trim();
+    }
+    if (formattedExpDate) {
+      metaUpdates.expiration_date = formattedExpDate;
+    }
+
+    if (Object.keys(metaUpdates).length > 0) {
+      const { error: metaErr } = await supabase
+        .from('vaccines')
+        .update(metaUpdates)
+        .eq('id', vaccineId);
+
+      if (metaErr) {
+        console.warn('[VaccineAction] Advertencia al actualizar metadatos de lote/vencimiento en vaccines:', metaErr);
+      }
+    }
+
+    // 3. Invalidar la caché de la vista de stock en Next.js
+    revalidatePath('/dashboard/vacunas');
+    revalidatePath(`/dashboard/vacunas/${vaccineId}`);
+    revalidatePath('/dashboard');
+
+    // 4. Retornar el registro consolidado actualizado desde v_vaccines_stock
+    return await getVaccineStockByIdAction(vaccineId);
+  } catch (error) {
+    console.error('[VaccineAction] addVaccineStockAction falló:', error);
+    throw error;
+  }
+}
+
+export interface ScheduleReplenishmentInput {
+  vaccineId: string;
+  scheduledDate: string; // 'YYYY-MM-DD'
+  quantityToOrder: number;
+  notes?: string | null;
+}
+
+/**
+ * Server Action 2: Programar Reposición
+ * - Inserta el pedido programado en la tabla `replenishment_schedules` con estado 'pending'.
+ * - Invalida la caché del panel de vacunas.
+ */
+export async function scheduleReplenishmentAction(input: ScheduleReplenishmentInput) {
+  const { vaccineId, scheduledDate, quantityToOrder, notes } = input;
+
+  if (!vaccineId || !scheduledDate || !quantityToOrder) {
+    throw new Error('Vacuna, fecha estimada y cantidad son requeridas.');
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('replenishment_schedules')
+      .insert([
+        {
+          vaccine_id: vaccineId,
+          scheduled_date: scheduledDate,
+          quantity_to_order: Number(quantityToOrder),
+          status: 'pending',
+          notes: notes || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[VaccineAction] Error al programar reposición en replenishment_schedules:', error);
+      throw new Error(`Error en replenishment_schedules: ${error.message}`);
+    }
+
+    revalidatePath('/dashboard/vacunas');
+    revalidatePath(`/dashboard/vacunas/${vaccineId}`);
+
+    return data;
+  } catch (error) {
+    console.error('[VaccineAction] scheduleReplenishmentAction falló:', error);
+    throw error;
+  }
+}
+
+export interface ReportIncidentInput {
+  vaccineId: string;
+  type: 'damage' | 'cold_chain_failure' | 'stock_error' | 'other';
+  description: string;
+  quantityAffected?: number | null;
+  reportedBy?: string;
+  deductFromStock?: boolean;
+}
+
+/**
+ * Server Action 3: Reportar un Incidente
+ * - Guarda el reporte formal en `incident_reports`.
+ * - Si afecta físicamente al inventario (deductFromStock = true y quantityAffected > 0), 
+ *   inserta un movimiento de merma/pérdida negativo en `stock_movements`.
+ * - Invalida la caché para refrescar el balance dinámico.
+ */
+export async function reportVaccineIncidentAction(input: ReportIncidentInput) {
+  const { vaccineId, type, description, quantityAffected, reportedBy, deductFromStock = true } = input;
+
+  if (!vaccineId || !type || !description) {
+    throw new Error('Vacuna, tipo de incidente y descripción son requeridos.');
+  }
+
+  const affected = Number(quantityAffected || 0);
+
+  try {
+    const reporterName = (reportedBy && reportedBy.trim() && reportedBy !== 'current_user_id' && reportedBy !== 'unknown_user') 
+      ? reportedBy.trim() 
+      : 'Administrador';
+
+    // 1. Insertar el reporte en `incident_reports`
+    const { data: incident, error: incError } = await supabase
+      .from('incident_reports')
+      .insert([
+        {
+          vaccine_id: vaccineId,
+          incident_type: type,
+          description: description,
+          quantity_affected: affected > 0 ? affected : null,
+          reported_by: reporterName,
+          status: 'new',
+        },
+      ])
+      .select()
+      .single();
+
+    if (incError) {
+      console.error('[VaccineAction] Error al registrar incidente en incident_reports:', incError);
+      throw new Error(`Error al registrar en incident_reports: ${incError.message}`);
+    }
+
+    // 2. Si el incidente afecta físicamente al inventario, registrar merma en stock_movements
+    if (deductFromStock && affected > 0) {
+      const { error: smError } = await supabase
+        .from('stock_movements')
+        .insert([
+          {
+            vaccine_id: vaccineId,
+            type: 'INCIDENT',
+            quantity_vials: -Math.abs(affected),
+            description: `Merma/Pérdida por incidente (${type}): -${affected} viales. Motivo: ${description}`,
+            metadata: {
+              incident_id: incident.id,
+              incident_type: type,
+              quantity_affected: affected,
+              reported_by: reporterName,
+              source: 'quick_action_incident_report',
+              reported_at: new Date().toISOString(),
+            },
+            created_at: new Date().toISOString(),
+          },
+        ]);
+
+      if (smError) {
+        console.error('[VaccineAction] Error al registrar merma en stock_movements:', smError);
+        throw new Error(`Incidente registrado, pero falló el ajuste en stock_movements: ${smError.message}`);
+      }
+    }
+
+    // 3. Invalidar la caché de la vista de stock en Next.js
+    revalidatePath('/dashboard/vacunas');
+    revalidatePath(`/dashboard/vacunas/${vaccineId}`);
+    revalidatePath('/dashboard');
+
+    const updatedStock = await getVaccineStockByIdAction(vaccineId);
+
+    return {
+      incident,
+      updatedStock,
+    };
+  } catch (error) {
+    console.error('[VaccineAction] reportVaccineIncidentAction falló:', error);
+    throw error;
+  }
+}
+
+/**
+ * Server Action: Elimina una orden de reposición por ID y revalida la caché.
+ */
+export async function deleteReplenishmentScheduleAction(scheduleId: string, vaccineId?: string) {
+  if (!scheduleId) return;
+  const { error } = await supabase
+    .from('replenishment_schedules')
+    .delete()
+    .eq('id', scheduleId);
+
+  if (error) {
+    console.error('[VaccineAction] Error al eliminar reposición:', error);
+    throw new Error(error.message);
+  }
+
+  if (vaccineId) {
+    revalidatePath(`/dashboard/vacunas/${vaccineId}`);
+  }
+  revalidatePath('/dashboard/vacunas');
+}
+
+/**
+ * Server Action: Elimina un reporte de incidente por ID y revalida la caché.
+ */
+export async function deleteVaccineIncidentAction(incidentId: string, vaccineId?: string) {
+  if (!incidentId) return;
+  const { error } = await supabase
+    .from('incident_reports')
+    .delete()
+    .eq('id', incidentId);
+
+  if (error) {
+    console.error('[VaccineAction] Error al eliminar incidente:', error);
+    throw new Error(error.message);
+  }
+
+  if (vaccineId) {
+    revalidatePath(`/dashboard/vacunas/${vaccineId}`);
+  }
+  revalidatePath('/dashboard/vacunas');
+}
+
 

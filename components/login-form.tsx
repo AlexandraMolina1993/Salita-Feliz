@@ -27,14 +27,16 @@ export function LoginForm() {
     setError("")
 
     try {
-      const success = await login(email, password)
-      if (success) {
+      const result = await login(email, password)
+      if (result.success) {
         router.push("/dashboard")
+        router.refresh()
       } else {
-        setError("Credenciales inválidas. Por favor, intenta nuevamente.")
+        setError(result.error || "Credenciales inválidas. Por favor, revisa tu email y contraseña.")
       }
-    } catch (error) {
-      setError("Error al iniciar sesión. Por favor, intenta nuevamente.")
+    } catch (err: any) {
+      console.error("Error al procesar inicio de sesión:", err)
+      setError(err?.message || "Error al iniciar sesión. Por favor, intenta nuevamente.")
     } finally {
       setIsLoading(false)
     }

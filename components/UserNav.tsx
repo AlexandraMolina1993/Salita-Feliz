@@ -8,18 +8,31 @@ import { LogOut, User, Settings } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { logout, getCurrentUser } from '@/lib/auth' 
+import { useState, useEffect } from 'react'
+import { logout, getCurrentUser } from '@/lib/auth'
 
 export function UserNav() {
   const router = useRouter()
-  const user = getCurrentUser()
-  const userEmail = user ? user.email : "admin@salitafeliz.com"
+  const [userEmail, setUserEmail] = useState<string>('admin@salitafeliz.com')
+
+  useEffect(() => {
+    let isMounted = true
+    getCurrentUser().then((u) => {
+      if (isMounted && u?.email) {
+        setUserEmail(u.email)
+      }
+    }).catch(() => {})
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const userRole = userEmail === "admin@salitafeliz.com" ? "Administrador" : "Usuario"
   const userInitial = userRole.charAt(0)
 
   // Cierre de sesión (Funcional)
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     router.push('/login') 
   }
 

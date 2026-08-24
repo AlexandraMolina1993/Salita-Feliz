@@ -10,7 +10,7 @@ import {
   Database,
   replenishment_schedules,
 } from "./supabase";
-import { getArgentinaTodayDateString } from "./dateUtils";
+import { getArgentinaTodayDateString, formatDateToISO } from "./dateUtils";
 
 export { supabase, type Appointment };
 
@@ -55,16 +55,17 @@ export type ReplenishmentSchedule = {
 };
 // --- Tipos de Datos Unificados ---
 
-export type HistoryItemType = 'replenishment' | 'incident';
+export type HistoryItemType = 'replenishment' | 'incident' | 'movement' | 'consumption' | 'adjustment';
 
-// Tipo para unificar el historial (Reposición + Incidente)
+// Tipo para unificar el historial (Reposición + Incidente + Movimiento Ledger)
 export type UnifiedHistoryItem = {
     id: string;
     date: string;
-    type: 'replenishment' | 'incident';
+    type: 'replenishment' | 'incident' | 'movement' | 'consumption' | 'adjustment';
     description: string;
     quantity: number | null;
     status: string;
+    metadata?: Record<string, unknown> | null;
 };
 export type Vaccine = {
     id: string;
@@ -91,21 +92,8 @@ export type Incident = {
 };
 
 // --- Funciones auxiliares (Helpers) ---
-const isExpiringSoon = (expirationDate: string | null | undefined) => {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  const diffTime = expDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays <= 30 && diffDays > 0;
-};
-
-const isExpired = (expirationDate: string | null | undefined) => {
-  if (!expirationDate) return false;
-  const today = new Date();
-  const expDate = new Date(expirationDate);
-  return expDate < today;
-};
+export { isVaccineExpiringSoon as isExpiringSoon, isVaccineExpired as isExpired } from "./dateUtils";
+import { isVaccineExpiringSoon as isExpiringSoon, isVaccineExpired as isExpired } from "./dateUtils";
 
 const calculateAge = (birthDate: string | null) => {
   if (!birthDate) return 0;
@@ -860,18 +848,29 @@ export async function addStockToVaccine(
         throw new Error("La cantidad de stock a agregar debe ser mayor a cero.");
     }
     
-    // 1. Registrar movimiento inmutable en stock_movements
-    await supabase.from("stock_movements").insert({
+    const formattedExpDate = expiration_date ? (formatDateToISO(expirationDate) || null) : null;
+
+    // 1. Registrar movimiento inmutable en stock_movements (tipo REPLENISHMENT, dirección IN)
+    const { error: smError } = await supabase.from("stock_movements").insert({
       vaccine_id: vaccineId,
       type: "REPLENISHMENT",
-      quantity_vials: stock_quantity,
-      description: `Ingreso de stock: +${stock_quantity} viales`,
+      quantity_vials: Math.abs(stock_quantity),
+      description: `Ingreso de stock (IN): +${stock_quantity} viales${lotNumberOrNull(lot_number)}`,
       metadata: {
+        direction: 'IN',
+        action: 'ADD_STOCK',
+        quantity_vials: stock_quantity,
         lot_number: lot_number || null,
-        expiration_date: expiration_date || null,
-        source: "add_stock_dialog"
-      }
+        expiration_date: formattedExpDate,
+        source: "add_stock_dialog",
+        added_at: new Date().toISOString()
+      },
+      created_at: new Date().toISOString()
     });
+
+    if (smError) {
+      console.error("Error al registrar movimiento en stock_movements:", smError);
+    }
 
     // 2. Obtener el registro actual para conocer el stock_quantity
     const { data: currentVaccine, error: fetchError } = await supabase
@@ -895,11 +894,11 @@ export async function addStockToVaccine(
         stock_quantity: newStock 
     };
 
-    if (lot_number) {
-        updatedData.lot_number = lot_number;
+    if (lot_number && lot_number.trim() !== '') {
+        updatedData.lot_number = lot_number.trim();
     }
-    if (expiration_date !== undefined) {
-        updatedData.expiration_date = expiration_date;
+    if (formattedExpDate) {
+        updatedData.expiration_date = formattedExpDate;
     }
 
     // 4. Ejecutar la actualización en Supabase
@@ -916,6 +915,10 @@ export async function addStockToVaccine(
     }
 
     return data;
+}
+
+function lotNumberOrNull(lot?: string) {
+    return lot && lot.trim() ? ` | Lote: ${lot.trim()}` : '';
 }
 
 export async function getVaccinationStatsByMonth(year: number) {
@@ -1073,17 +1076,22 @@ export async function reportVaccineIncident(
     type: IncidentType,
     description: string,
     quantityAffected: number | null = null,
-    reportedBy: string = 'unknown_user' 
+    reportedBy: string = 'Administrador',
+    deductFromStock: boolean = true
 ): Promise<IncidentReport> {
     
+    const affected = quantityAffected ? Math.abs(Number(quantityAffected)) : 0;
+    const reporterName = (reportedBy && reportedBy.trim() && reportedBy !== 'current_user_id' && reportedBy !== 'unknown_user')
+        ? reportedBy.trim()
+        : 'Administrador';
+
     const newIncident = {
         vaccine_id: vaccineId,
         incident_type: type,
         description: description,
-        quantity_affected: quantityAffected,
-        reported_by: reportedBy,
+        quantity_affected: affected > 0 ? affected : null,
+        reported_by: reporterName,
         status: 'new',
-        // created_at NO se envía, Supabase lo gestiona automáticamente (NOT NULL, now())
     };
 
     const { data, error } = await supabase
@@ -1096,45 +1104,99 @@ export async function reportVaccineIncident(
         console.error("Supabase Error al reportar incidente:", error.message);
         throw new Error(`Error al registrar el incidente: ${error.message}`);
     }
+
+    // Si el incidente afecta físicamente al stock, registrar merma en stock_movements
+    if (deductFromStock && affected > 0) {
+        const { error: smError } = await supabase
+            .from('stock_movements')
+            .insert({
+                vaccine_id: vaccineId,
+                type: 'INCIDENT',
+                quantity_vials: -Math.abs(affected),
+                description: `Merma/Pérdida por incidente (${type}): -${affected} viales. Motivo: ${description}`,
+                metadata: {
+                    incident_id: data.id,
+                    incident_type: type,
+                    quantity_affected: affected,
+                    reported_by: reporterName,
+                    source: 'quick_action_incident_report',
+                    reported_at: new Date().toISOString()
+                },
+                created_at: new Date().toISOString()
+            });
+
+        if (smError) {
+            console.error("Error al registrar merma en stock_movements:", smError);
+        }
+    }
    
     return data as IncidentReport;
 }
 /**
- * Obtiene, combina y ordena cronológicamente el historial de reposiciones e incidentes de una vacuna.
+ * Obtiene, combina y ordena cronológicamente el historial de reposiciones, incidentes y movimientos de stock de una vacuna.
  * @param vaccineId El ID de la vacuna.
  * @returns Una lista unificada de historial ordenada por fecha descendente.
  */
 export async function getVaccineUnifiedHistory(vaccineId: string): Promise<UnifiedHistoryItem[]> {
-    // 1. Cargar datos de forma concurrente
+    // 1. Cargar datos de forma concurrente de las tres tablas
+    const { data: movementsData } = await supabase
+        .from('stock_movements')
+        .select('*')
+        .eq('vaccine_id', vaccineId)
+        .order('created_at', { ascending: false });
+
     const [replenishments, incidents] = await Promise.all([
-        getReplenishmentSchedulesByVaccineId(vaccineId),
-        getVaccineIncidentsByVaccineId(vaccineId), 
+        getReplenishmentSchedulesByVaccineId(vaccineId).catch(() => []),
+        getVaccineIncidentsByVaccineId(vaccineId).catch(() => []),
     ]);
 
-    // 2. Mapear Reposiciones a UnifiedHistoryItem (COMPLETADO)
-    const mappedReplenishments: UnifiedHistoryItem[] = (replenishments || []).map(r => ({
+    const movements = movementsData || [];
+
+    // 2. Mapear Reposiciones a UnifiedHistoryItem
+    const mappedReplenishments: UnifiedHistoryItem[] = (replenishments || []).map((r: any) => ({
         id: r.id,
-        date: r.scheduled_date, // Usamos scheduled_date como la fecha principal
+        date: r.scheduled_date || r.created_at,
         type: 'replenishment',
-        description: `Reposición programada: ${r.notes ? r.notes : 'Sin nota'}`,
+        description: `Reposición programada: ${r.notes ? r.notes : 'Sin observaciones adicionales'}`,
         quantity: r.quantity_to_order,
         status: r.status,
     }));
 
-    // 3. Mapear Incidentes a UnifiedHistoryItem (COMPLETADO)
-    const mappedIncidents: UnifiedHistoryItem[] = (incidents || []).map(i => ({
+    // 3. Mapear Incidentes a UnifiedHistoryItem
+    const mappedIncidents: UnifiedHistoryItem[] = (incidents || []).map((i: any) => ({
         id: i.id,
-        date: i.created_at, // Usamos created_at como la fecha principal
+        date: i.created_at,
         type: 'incident',
         description: `Incidente (${i.incident_type}): ${i.description}`,
-        quantity: i.quantity_affected ? -i.quantity_affected : null, // Cantidad afectada, generalmente negativa
+        quantity: i.quantity_affected ? -Math.abs(i.quantity_affected) : null,
         status: i.status,
     }));
 
-    // 4. Unificar y Ordenar
+    // 4. Mapear Movimientos de Stock directos (Ingresos, Consumos, Ajustes que no sean incidentes duplicados)
+    const mappedMovements: UnifiedHistoryItem[] = (movements || [])
+        .filter((m: any) => m.type !== 'INCIDENT') // Los incidentes ya están mapeados desde incident_reports
+        .map((m: any) => {
+            let itemType: 'movement' | 'consumption' | 'adjustment' | 'replenishment' = 'movement';
+            if (m.type === 'CONSUMPTION') itemType = 'consumption';
+            else if (m.type === 'ADJUSTMENT') itemType = 'adjustment';
+            else if (m.type === 'REPLENISHMENT' || m.type === 'INITIAL_STOCK') itemType = 'movement';
+
+            return {
+                id: m.id,
+                date: m.created_at,
+                type: itemType,
+                description: m.description,
+                quantity: Number(m.quantity_vials),
+                status: 'completed',
+                metadata: m.metadata
+            };
+        });
+
+    // 5. Unificar y Ordenar
     const unifiedHistory: UnifiedHistoryItem[] = [
         ...mappedReplenishments,
         ...mappedIncidents,
+        ...mappedMovements,
     ];
 
     // Ordenar por fecha de forma descendente (más reciente primero)

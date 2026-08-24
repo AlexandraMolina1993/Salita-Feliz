@@ -20,27 +20,45 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const pathname = usePathname() 
 
   useEffect(() => {
-    const checkAuth = () => {
-      const authenticated = isAuthenticated()
-      setIsAuth(authenticated)
+    let isMounted = true
 
-      if (!authenticated) {
-        // Redirigir si no está autenticado
-        router.push("/login")
-      } else {
-        setIsLoading(false)
-      }
-    }
+    const checkAuth = async () => {
+      try {
+        // Rutas públicas que no requieren verificación
+        if (pathname === '/login' || pathname.startsWith('/register') || pathname.startsWith('/auth')) {
+          if (isMounted) {
+            setIsAuth(true)
+            setIsLoading(false)
+          }
+          return
+        }
 
-    // Ejecutar la autenticación solo si no estamos en /login
-    // y solo una vez al montar, a menos que el pathname cambie.
-    if (pathname !== '/login') {
-        checkAuth()
-    } else {
-        setIsLoading(false)
+        const authenticated = await isAuthenticated()
+        if (isMounted) {
+          setIsAuth(authenticated)
+          if (!authenticated) {
+            router.push("/login")
+          }
+        }
+      } catch (err) {
+        console.error("[AuthGuard] Error al verificar autenticación:", err)
+        if (isMounted) {
+          setIsAuth(false)
+          router.push("/login")
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
     }
 
-  }, [pathname]) // Usamos [pathname] para que se re-ejecute si la ruta cambia
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
+  }, [pathname, router])
 
   if (isLoading) {
     return (

@@ -96,12 +96,13 @@ export function getArgentinaTargetDateString(hoursAhead: number = 24, customDate
 /**
  * Formatea una fecha a texto estándar argentino:
  * - 'short': "17/08/2026"
+ * - 'short-text': "17 de ago. de 2026"
  * - 'medium': "17 de agosto de 2026"
  * - 'full': "Lunes, 17 de agosto de 2026"
  */
 export function formatNominalDate(
   dateInput: string | Date | null | undefined,
-  style: 'short' | 'medium' | 'full' = 'short'
+  style: 'short' | 'short-text' | 'medium' | 'full' = 'short'
 ): string {
   if (!dateInput) return 'N/A';
   const d = parseLocalDate(dateInput);
@@ -117,13 +118,87 @@ export function formatNominalDate(
   const formatter = new Intl.DateTimeFormat('es-AR', {
     weekday: style === 'full' ? 'long' : undefined,
     year: 'numeric',
-    month: 'long',
+    month: style === 'short-text' ? 'short' : 'long',
     day: 'numeric',
   });
 
   const formatted = formatter.format(d);
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
+
+/**
+ * Formatea la fecha de un elemento del historial unificado (replenishment, incident, movement, consumption).
+ * Previene el desfase de zona horaria (UTC-3) para fechas nominales y muestra hora sólo cuando es un timestamp real.
+ */
+export function formatUnifiedHistoryDate(
+  dateInput: string | Date | null | undefined,
+  itemType?: string
+): string {
+  if (!dateInput) return 'N/A';
+
+  // Si es reposición o un string que solo contiene fecha (YYYY-MM-DD o YYYY-MM-DDT00:00:00...)
+  const isDateOnly =
+    itemType === 'replenishment' ||
+    (typeof dateInput === 'string' &&
+      (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim()) ||
+        /^\d{4}-\d{2}-\d{2}T00:00(:00(\.000)?)?Z?$/i.test(dateInput.trim())));
+
+  if (isDateOnly) {
+    const d = parseLocalDate(dateInput);
+    if (!d) return typeof dateInput === 'string' ? dateInput : 'N/A';
+    return new Intl.DateTimeFormat('es-AR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(d);
+  }
+
+  // Timestamp real con hora (created_at en UTC)
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) {
+    return typeof dateInput === 'string' ? dateInput : 'N/A';
+  }
+
+  return new Intl.DateTimeFormat('es-AR', {
+    timeZone: CLINIC_TIMEZONE,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+/**
+ * Comprueba de manera determinista si una vacuna vence en los próximos 30 días,
+ * sin verse afectada por desfases de zona horaria.
+ */
+export function isVaccineExpiringSoon(expirationDate?: string | Date | null | undefined): boolean {
+  if (!expirationDate) return false;
+  const d = parseLocalDate(expirationDate);
+  if (!d) return false;
+  const today = parseLocalDate(getArgentinaTodayDateString());
+  if (!today) return false;
+  const diffTime = d.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= 30 && diffDays > 0;
+}
+
+/**
+ * Comprueba de manera determinista si una vacuna ya expiró,
+ * sin verse afectada por desfases de zona horaria.
+ */
+export function isVaccineExpired(expirationDate?: string | Date | null | undefined): boolean {
+  if (!expirationDate) return false;
+  const d = parseLocalDate(expirationDate);
+  if (!d) return false;
+  const today = parseLocalDate(getArgentinaTodayDateString());
+  if (!today) return false;
+  return d.getTime() < today.getTime();
+}
+
+export const isExpiringSoon = isVaccineExpiringSoon;
+export const isExpired = isVaccineExpired;
 
 /**
  * Formato completo con día de la semana en español: "Lunes, 17 de agosto de 2026"
@@ -185,3 +260,4 @@ export function getHoursUntilAppointment(dateStr: string, timeStr?: string): num
   const diffMs = appointmentTs - Date.now();
   return diffMs / (1000 * 60 * 60);
 }
+

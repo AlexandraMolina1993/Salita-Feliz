@@ -1,7 +1,7 @@
 // app/dashboard/vacunas/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -28,13 +28,8 @@ import {
     Droplet,
 } from "lucide-react";
 import {
-    deleteReplenishmentSchedule,
-    deleteVaccineIncident,
     getVaccineStatsById,
-    addStockToVaccine,
     getReplenishmentSchedulesByVaccineId, 
-    scheduleReplenishment, 
-    reportVaccineIncident,
     getVaccineUnifiedHistory
 } from "@/lib/database";
 import type {
@@ -42,16 +37,25 @@ import type {
     ReplenishmentSchedule, 
     IncidentType,
 } from "@/lib/database";
-import { getVaccineStockByIdAction, type ExtendedVaccineItem } from "@/app/actions/vaccines";
+import { 
+    getVaccineStockByIdAction, 
+    addVaccineStockAction,
+    scheduleReplenishmentAction,
+    reportVaccineIncidentAction,
+    deleteReplenishmentScheduleAction,
+    deleteVaccineIncidentAction,
+    type ExtendedVaccineItem 
+} from "@/app/actions/vaccines";
 
 import { AddStockDialog } from "@/components/add-stock-dialog"; 
 import { ScheduleReplenishmentDialog } from "@/components/schedule-replenishment-dialog"; 
-import { ReportIncidentDialog } from "@/components/report-incident-dialog";
+import { ReportIncidentDialog, type IncidentFormData } from "@/components/report-incident-dialog";
 import { AIStockAutonomyCard } from "@/components/ai-stock-autonomy-card";
 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { formatNominalDate, formatUnifiedHistoryDate } from "@/lib/dateUtils";
 
 interface VaccineStats {
     monthly_applied: number;
@@ -80,17 +84,21 @@ export default function VaccineDetailPage() {
     const [isSubmittingIncident, setIsSubmittingIncident] = useState(false);
 
     // --- FUNCIÓN: MANEJO DE ELIMINACIÓN DE ELEMENTOS DEL HISTORIAL ---
-    const handleDeleteHistoryItem = async (itemId: string, type: 'incident' | 'replenishment') => {
-        if (!confirm(`¿Estás seguro de que deseas eliminar este registro de ${type === 'incident' ? 'incidente' : 'reposición'}?`)) {
+    const handleDeleteHistoryItem = async (itemId: string, type: string) => {
+        if (type !== 'incident' && type !== 'replenishment') {
+            return;
+        }
+
+        if (!confirm(`¿Estás seguro de que deseas eliminar este registro de ${type === 'incident' ? 'incidente' : 'reposición programada'}?`)) {
             return;
         }
 
         setDeletingId(itemId);
         try {
             if (type === 'incident') {
-                await deleteVaccineIncident(itemId);
+                await deleteVaccineIncidentAction(itemId, vaccine?.id);
             } else {
-                await deleteReplenishmentSchedule(itemId);
+                await deleteReplenishmentScheduleAction(itemId, vaccine?.id);
             }
 
             setHistory(prev => prev.filter(item => item.id !== itemId));
@@ -104,7 +112,7 @@ export default function VaccineDetailPage() {
                 description: "El evento fue removido del historial de trazabilidad correctamente.",
             });
             
-            if (params.id) loadVaccineData(params.id as string);
+            if (params.id) await loadVaccineData(params.id as string);
 
         } catch (error) {
             console.error("Error al eliminar el ítem:", error);
@@ -118,63 +126,115 @@ export default function VaccineDetailPage() {
         }
     };
 
-    // 🎨 Subcomponente Dinámico de Tarjetas del Historial con Botón de Eliminar
+    // 🎨 Subcomponente Dinámico de Tarjetas del Historial de Trazabilidad
     const HistoryItemCard: React.FC<{ item: UnifiedHistoryItem }> = ({ item }) => {
-        const isIncident = item.type === 'incident';
-        const colorClass = isIncident ? 'border-red-400 bg-red-50' : 'border-green-400 bg-green-50';
-        const icon = isIncident ? '⚠️' : '📦';
-        const title = isIncident ? `Incidente: ${item.status?.toUpperCase()}` : `Reposición: ${item.status?.toUpperCase()}`;
+        const isDeletable = item.type === 'incident' || item.type === 'replenishment';
         const isDeletingThis = deletingId === item.id;
 
-        const dateDisplay = new Date(item.date).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+        const getCardStyles = () => {
+            switch (item.type) {
+                case 'incident':
+                    return {
+                        colorClass: 'border-rose-400 bg-rose-50/70',
+                        badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+                        icon: '⚠️',
+                        title: `Incidente: ${item.status?.toUpperCase() || 'REPORTADO'}`,
+                        qtyLabel: 'Viales Afectados / Merma'
+                    };
+                case 'replenishment':
+                    return {
+                        colorClass: 'border-sky-400 bg-sky-50/70',
+                        badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+                        icon: '📅',
+                        title: `Reposición Programada: ${item.status?.toUpperCase() || 'PENDIENTE'}`,
+                        qtyLabel: 'Cantidad Ordenada'
+                    };
+                case 'consumption':
+                    return {
+                        colorClass: 'border-indigo-400 bg-indigo-50/60',
+                        badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+                        icon: '💉',
+                        title: 'Consumo Clínico (Aplicación de Dosis)',
+                        qtyLabel: 'Dosis Aplicada'
+                    };
+                case 'adjustment':
+                    return {
+                        colorClass: 'border-amber-400 bg-amber-50/70',
+                        badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+                        icon: '🔄',
+                        title: 'Ajuste de Inventario',
+                        qtyLabel: 'Diferencia'
+                    };
+                case 'movement':
+                default:
+                    return {
+                        colorClass: 'border-emerald-400 bg-emerald-50/70',
+                        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                        icon: '📦',
+                        title: 'Ingreso de Stock (IN)',
+                        qtyLabel: 'Viales Ingresados'
+                    };
+            }
+        };
+
+        const config = getCardStyles();
+
+        const dateDisplay = formatUnifiedHistoryDate(item.date, item.type);
 
         return (
-            <Card className={`border-l-4 ${colorClass} relative group overflow-hidden`}>
+            <Card className={`border-l-4 ${config.colorClass} relative group overflow-hidden shadow-xs hover:shadow-sm transition-all`}>
                 <CardContent className="p-4 flex justify-between items-start gap-4">
                     <div className="flex-1">
-                        <p className="text-lg font-semibold flex items-center">
-                            {icon} <span className="ml-2">{title}</span>
-                        </p>
-                        <p className="text-sm text-gray-700 mt-1">{item.description}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base">{config.icon}</span>
+                            <span className="font-bold text-slate-800 text-sm sm:text-base">{config.title}</span>
+                            <Badge variant="outline" className={`text-[10px] uppercase font-bold py-0 h-5 ${config.badgeClass}`}>
+                                {item.type}
+                            </Badge>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-700 mt-1.5 leading-relaxed">{item.description}</p>
                         {item.quantity !== null && item.quantity !== undefined && (
-                            <p className="text-xs mt-1 font-semibold text-muted-foreground">
-                                {isIncident ? `Dosis Afectadas: ${item.quantity}` : `Cantidad Ordenada: ${item.quantity}`}
+                            <p className="text-xs mt-1.5 font-bold text-slate-600">
+                                {config.qtyLabel}: <span className={item.quantity < 0 ? 'text-rose-600' : 'text-emerald-700'}>
+                                    {item.quantity > 0 ? `+${item.quantity}` : item.quantity} {item.type === 'consumption' ? 'dosis' : 'viales'}
+                                </span>
                             </p>
                         )}
-                        <p className="text-xs text-gray-400 mt-2 block sm:hidden">{dateDisplay}</p>
+                        <p className="text-[11px] text-slate-400 mt-2 block sm:hidden">{dateDisplay}</p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 shrink-0">
-                        <p className="text-xs text-gray-500 font-medium hidden sm:block">{dateDisplay}</p>
+                        <p className="text-xs text-slate-500 font-medium hidden sm:block">{dateDisplay}</p>
                         
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            disabled={isDeletingThis}
-                            onClick={() => handleDeleteHistoryItem(item.id, item.type as 'incident' | 'replenishment')}
-                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200/60 bg-white shadow-sm transition-all"
-                        >
-                            {isDeletingThis ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-red-600" />
-                            ) : (
-                                <Trash2 className="h-4 w-4" />
-                            )}
-                        </Button>
+                        {isDeletable && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                disabled={isDeletingThis}
+                                onClick={() => handleDeleteHistoryItem(item.id, item.type)}
+                                title="Eliminar registro"
+                                className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200/60 bg-white shadow-xs transition-all"
+                            >
+                                {isDeletingThis ? (
+                                    <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                )}
+                            </Button>
+                        )}
                     </div>
                 </CardContent>
             </Card>
         );
     };
     
-    const loadVaccineData = async (id: string) => {
+    const loadVaccineData = useCallback(async (id: string, isInitial = false) => {
+        if (!id) {
+            setLoading(false);
+            return;
+        }
         try {
-            setLoading(true);
+            if (isInitial) setLoading(true);
             const [vaccineData, usageStatsData, schedulesData, historyData] = await Promise.all([
                 getVaccineStockByIdAction(id),
                 getVaccineStatsById(id).catch(() => null),
@@ -206,44 +266,58 @@ export default function VaccineDetailPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [router, toast]);
+
+    const vaccineParamId = params?.id as string | undefined;
 
     useEffect(() => {
-        if (params.id) {
-            loadVaccineData(params.id as string);
+        if (vaccineParamId) {
+            loadVaccineData(vaccineParamId, true);
+        } else {
+            setLoading(false);
         }
-    }, [params.id]);
+    }, [vaccineParamId, loadVaccineData]);
 
+    // 1. ACCIÓN RÁPIDA: AÑADIR STOCK (VIALES)
     const handleStockAdd = async ({ 
         quantity, 
         lot_number, 
-        expiration_date 
+        expiration_date,
+        notes
     }: { 
-        quantity: number, 
-        lot_number?: string, 
-        expiration_date?: Date | string | null 
+        quantity: number; 
+        lot_number?: string; 
+        expiration_date?: Date | string | null;
+        notes?: string | null;
     }) => {
-        if (!vaccine) return;
+        if (!vaccine?.id) return;
+        const vId = vaccine.id;
         setIsSubmittingStock(true);
         try {
-            await addStockToVaccine(
-                vaccine.id!, 
-                quantity, 
-                lot_number, 
-                expiration_date
-            );
-            if (vaccine.id) {
-                await loadVaccineData(vaccine.id);
+            const updated = await addVaccineStockAction({
+                vaccineId: vId,
+                quantityVials: quantity,
+                lotNumber: lot_number,
+                expirationDate: expiration_date,
+                notes: notes,
+            });
+
+            if (updated) {
+                setVaccine(updated);
             }
+
+            await loadVaccineData(vId);
+
             toast({
-                title: "Stock Agregado",
-                description: `Se han añadido ${quantity} viales a ${vaccine.name}.`,
+                title: "Stock Añadido Exitosamente",
+                description: `Se han añadido ${quantity} viales a ${vaccine.name} y registrado en el Ledger de stock.`,
             });
             setIsStockDialogOpen(false); 
         } catch (error) {
+            console.error("Error al agregar stock:", error);
             toast({
                 title: "Error al agregar stock",
-                description: error instanceof Error ? error.message : "Hubo un error desconocido.",
+                description: error instanceof Error ? error.message : "Hubo un error al registrar el movimiento en stock_movements.",
                 variant: "destructive",
             });
         } finally {
@@ -251,53 +325,39 @@ export default function VaccineDetailPage() {
         }
     };
 
+    // 2. ACCIÓN RÁPIDA: PROGRAMAR REPOSICIÓN
     const handleScheduleReplenishment = async ({ 
         scheduled_date, 
         quantity_to_order, 
         notes 
     }: { 
-        scheduled_date: string, 
-        quantity_to_order: number, 
-        notes?: string | null 
+        scheduled_date: string; 
+        quantity_to_order: number; 
+        notes?: string | null;
     }) => {
-        if (!vaccine) return;
+        if (!vaccine?.id) return;
+        const vId = vaccine.id;
         setIsSubmittingSchedule(true);
         try {
-            const newSchedule = await scheduleReplenishment(
-                vaccine.id!, 
-                scheduled_date, 
-                quantity_to_order, 
-                notes
-            );
-            
-            setSchedules(prev => [...prev, newSchedule].sort((a, b) => 
-                new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
-            ));
-
-            const newHistoryItem: UnifiedHistoryItem = {
-                id: newSchedule.id,
-                date: newSchedule.created_at || new Date().toISOString(),
-                type: 'replenishment',
-                description: `Pedido de reposición programado. Notas: ${notes || 'Sin observaciones'}`,
-                quantity: quantity_to_order,
-                status: newSchedule.status || 'pending',
-            };
-
-            setHistory(prevHistory => {
-                const updatedHistory = [...prevHistory, newHistoryItem];
-                updatedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                return updatedHistory;
+            await scheduleReplenishmentAction({
+                vaccineId: vId,
+                scheduledDate: scheduled_date,
+                quantityToOrder: quantity_to_order,
+                notes: notes,
             });
+            
+            await loadVaccineData(vId);
 
             toast({
                 title: "Reposición Programada",
-                description: `Orden de ${quantity_to_order} unidades programada para el ${format(new Date(scheduled_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: es })}.`,
+                description: `Orden de ${quantity_to_order} unidades guardada para el ${format(new Date(scheduled_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: es })}.`,
             });
             setIsScheduleDialogOpen(false);
         } catch (error) {
+            console.error("Error al programar reposición:", error);
             toast({
                 title: "Error al programar reposición",
-                description: error instanceof Error ? error.message : "Hubo un error desconocido.",
+                description: error instanceof Error ? error.message : "Hubo un error al guardar en replenishment_schedules.",
                 variant: "destructive",
             });
         } finally {
@@ -305,46 +365,37 @@ export default function VaccineDetailPage() {
         }
     };
 
-    type IncidentFormData = { 
-        type: IncidentType, 
-        description: string, 
-        quantity_affected?: number | null 
-    };
-
+    // 3. ACCIÓN RÁPIDA: REPORTAR UN INCIDENTE
     const handleReportIncident = async (data: IncidentFormData) => {
-        if (!vaccine) return;
+        if (!vaccine?.id) return;
+        const vId = vaccine.id;
         setIsSubmittingIncident(true);
         try {
-           const newIncident = await reportVaccineIncident(
-                vaccine.id!, 
-                data.type, 
-                data.description, 
-                data.quantity_affected,
-                'current_user_id'
-            );
-            const newHistoryItem: UnifiedHistoryItem = {
-                id: newIncident.id,
-                date: newIncident.created_at, 
-                type: 'incident',
-                description: `Tipo de Incidente: ${newIncident.incident_type}. Detalles: ${newIncident.description}`,
-                quantity: newIncident.quantity_affected,
-                status: newIncident.status,
-            };
-            setHistory(prevHistory => {
-                const updatedHistory = [...prevHistory, newHistoryItem];
-                updatedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                return updatedHistory;
+            const result = await reportVaccineIncidentAction({
+                vaccineId: vId,
+                type: data.type,
+                description: data.description,
+                quantityAffected: data.quantity_affected,
+                reportedBy: 'Administrador',
+                deductFromStock: data.deduct_from_stock,
             });
+
+            if (result?.updatedStock) {
+                setVaccine(result.updatedStock);
+            }
+
+            await loadVaccineData(vId);
+
             toast({
-                title: "Incidente Registrado",
-                description: `El incidente de tipo '${data.type}' ha sido registrado exitosamente.`,
+                title: "Incidente Registrado Formalmente",
+                description: `El incidente de tipo '${data.type}' ha sido guardado en incident_reports${data.deduct_from_stock && data.quantity_affected ? ' y descontado del inventario' : ''}.`,
             });
             setIsIncidentDialogOpen(false);
         } catch (error) {
-            console.error(error);
+            console.error("Error al reportar incidente:", error);
             toast({
                 title: "Error al registrar incidente",
-                description: error instanceof Error ? error.message : "Hubo un error desconocido al registrar el incidente.",
+                description: error instanceof Error ? error.message : "Hubo un error al registrar en incident_reports.",
                 variant: "destructive",
             });
         } finally {
@@ -396,7 +447,7 @@ export default function VaccineDetailPage() {
     const StatusIcon = statusObj.icon;
     const stockPercentage = Math.min(100, Math.max(0, (dynamicVials / (minStock || 1)) * 100));
     const expirationDate = vaccine.expiration_date
-        ? format(new Date(vaccine.expiration_date + 'T12:00:00'), "dd/MM/yyyy", { locale: es })
+        ? formatNominalDate(vaccine.expiration_date, "short")
         : "No disponible";
 
     return (
@@ -643,7 +694,7 @@ export default function VaccineDetailPage() {
                 <AIStockAutonomyCard
                     vaccineId={vaccine.id}
                     title={`Diagnóstico Predictivo de IA: ${vaccine.name}`}
-                    onRefresh={() => loadVaccineData(vaccine.id)}
+                    onRefresh={() => loadVaccineData(vaccine.id, false)}
                 />
             </div>
             
@@ -667,7 +718,7 @@ export default function VaccineDetailPage() {
             </div>
             
             {/* Diálogos modales */}
-            <AddStockDialog open={isStockDialogOpen} onOpenChange={setIsStockDialogOpen} vaccine={vaccine} onStockAdded={() => loadVaccineData(vaccine.id)} isSubmitting={isSubmittingStock} onSubmit={handleStockAdd} />
+            <AddStockDialog open={isStockDialogOpen} onOpenChange={setIsStockDialogOpen} vaccine={vaccine} onStockAdded={() => loadVaccineData(vaccine.id, false)} isSubmitting={isSubmittingStock} onSubmit={handleStockAdd} />
             <ScheduleReplenishmentDialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen} vaccine={vaccine} isSubmitting={isSubmittingSchedule} onSubmit={handleScheduleReplenishment} />
             <ReportIncidentDialog open={isIncidentDialogOpen} onOpenChange={setIsIncidentDialogOpen} vaccine={vaccine} isSubmitting={isSubmittingIncident} onSubmit={handleReportIncident} />
         </div>

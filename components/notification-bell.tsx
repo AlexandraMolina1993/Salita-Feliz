@@ -42,12 +42,13 @@ export function NotificationBell() {
   useEffect(() => {
     fetchNotifications();
 
-    // Polling regular cada 30 segundos
-    const interval = setInterval(fetchNotifications, 30000);
+    // Polling regular cada 45 segundos
+    const interval = setInterval(fetchNotifications, 45000);
 
-    // Suscripción Realtime en Supabase para actualizaciones instantáneas
+    // Suscripción Realtime en Supabase con nombre de canal único
+    const channelName = `sys_notifs_${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('system_notifications_realtime')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'system_notifications' },
