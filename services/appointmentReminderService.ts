@@ -502,56 +502,80 @@ Responde ÚNICAMENTE con un JSON válido con la siguiente estructura:
 }
 `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: 'application/json',
-          },
-        }),
-      }
+    const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const modelsToTry = Array.from(
+      new Set([
+        preferredModel,
+        'gemini-3.6-flash',
+        'gemini-3.7-flash',
+        'gemini-flash-latest',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+      ])
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        const parsed = JSON.parse(rawText);
-        const recommendations = Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0
-          ? parsed.recommendations
-          : [
-              'Presentarse con 10 minutos de anticipación.',
-              'Llevar DNI físico y Carnet de Vacunación.',
-              'Mantener una buena hidratación.',
-            ];
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                responseMimeType: 'application/json',
+              },
+            }),
+          }
+        );
 
-        const emailHtml = buildReminderEmailHtml({
-          patientName,
-          vaccineName,
-          dateFormatted,
-          timeFormatted,
-          nurseName,
-          recommendations,
-          summary: parsed.summary || '¡Te esperamos en Salita Feliz para cuidar de tu salud!',
-        });
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            const parsed = JSON.parse(rawText);
+            const recommendations =
+              Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0
+                ? parsed.recommendations
+                : [
+                    'Presentarse con 10 minutos de anticipación.',
+                    'Llevar DNI físico y Carnet de Vacunación.',
+                    'Mantener una buena hidratación.',
+                  ];
 
-        return {
-          subject: parsed.subject || `🔔 Recordatorio de Turno: ${vaccineName} - Salita Feliz`,
-          greeting: parsed.greeting || `Hola ${patientName}`,
-          patient_name: patientName,
-          vaccine_name: vaccineName,
-          appointment_date_formatted: dateFormatted,
-          appointment_time_formatted: timeFormatted,
-          clinical_recommendations: recommendations,
-          email_html: emailHtml,
-          chat_message: parsed.chat_message || '',
-          summary: parsed.summary || '',
-        };
+            const emailHtml = buildReminderEmailHtml({
+              patientName,
+              vaccineName,
+              dateFormatted,
+              timeFormatted,
+              nurseName,
+              recommendations,
+              summary: parsed.summary || '¡Te esperamos en Salita Feliz para cuidar de tu salud!',
+            });
+
+            return {
+              subject: parsed.subject || `🔔 Recordatorio de Turno: ${vaccineName} - Salita Feliz`,
+              greeting: parsed.greeting || `Hola ${patientName}`,
+              patient_name: patientName,
+              vaccine_name: vaccineName,
+              appointment_date_formatted: dateFormatted,
+              appointment_time_formatted: timeFormatted,
+              clinical_recommendations: recommendations,
+              email_html: emailHtml,
+              chat_message: parsed.chat_message || '',
+              summary: parsed.summary || '',
+            };
+          }
+        } else {
+          const errText = await response.text().catch(() => '');
+          console.warn(
+            `[AppointmentReminderAI] Gemini API (${model}) status ${response.status}: ${errText.slice(0, 120)}`
+          );
+        }
+      } catch (callErr) {
+        console.warn(`[AppointmentReminderAI] Error al intentar con modelo ${model}:`, callErr);
       }
     }
   } catch (err) {

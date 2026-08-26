@@ -366,49 +366,70 @@ Reglas:
   try {
     // 1. Intentar con Google Gemini API
     if (geminiApiKey) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${systemInstructions}\n\n${userPrompt}` }],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.2,
-            },
-          }),
-        }
+      const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+      const modelsToTry = Array.from(
+        new Set([
+          preferredModel,
+          'gemini-3.6-flash',
+          'gemini-3.7-flash',
+          'gemini-flash-latest',
+          'gemini-1.5-flash',
+          'gemini-1.5-pro',
+        ])
       );
 
-      if (response.ok) {
-        const jsonRes = await response.json();
-        const rawText = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          const parsed = JSON.parse(rawText);
-          const emailHtml = buildExecutiveEmailTemplate(
-            criticalItems,
-            parsed.urgency || 'HIGH',
-            parsed.clinical_assessment
+      for (const model of modelsToTry) {
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [{ text: `${systemInstructions}\n\n${userPrompt}` }],
+                  },
+                ],
+                generationConfig: {
+                  responseMimeType: 'application/json',
+                  temperature: 0.2,
+                },
+              }),
+            }
           );
 
-          return {
-            headline: parsed.headline || 'Alerta de Inventario de Vacunas',
-            urgency: parsed.urgency || 'HIGH',
-            clinical_assessment: parsed.clinical_assessment || '',
-            telegram_message: parsed.telegram_message || '',
-            email_subject: parsed.email_subject || 'Reporte de Abastecimiento de Vacunas',
-            email_html: emailHtml,
-            operational_recommendations: parsed.operational_recommendations || [],
-          };
+          if (response.ok) {
+            const jsonRes = await response.json();
+            const rawText = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (rawText) {
+              const parsed = JSON.parse(rawText);
+              const emailHtml = buildExecutiveEmailTemplate(
+                criticalItems,
+                parsed.urgency || 'HIGH',
+                parsed.clinical_assessment
+              );
+
+              return {
+                headline: parsed.headline || 'Alerta de Inventario de Vacunas',
+                urgency: parsed.urgency || 'HIGH',
+                clinical_assessment: parsed.clinical_assessment || '',
+                telegram_message: parsed.telegram_message || '',
+                email_subject: parsed.email_subject || 'Reporte de Abastecimiento de Vacunas',
+                email_html: emailHtml,
+                operational_recommendations: parsed.operational_recommendations || [],
+              };
+            }
+          } else {
+            const errorText = await response.text().catch(() => '');
+            console.warn(
+              `[AIAgent] Gemini API (${model}) respondió con status no OK (${response.status}): ${errorText.slice(0, 150)}`
+            );
+          }
+        } catch (modelErr) {
+          console.warn(`[AIAgent] Error al intentar consultar Gemini con modelo ${model}:`, modelErr);
         }
-      } else {
-        console.warn('[AIAgent] Gemini API respondió con status no OK:', response.status);
       }
     }
 
