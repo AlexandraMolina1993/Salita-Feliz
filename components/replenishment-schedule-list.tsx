@@ -93,7 +93,7 @@ export function ReplenishmentScheduleList({ schedules }: ReplenishmentScheduleLi
                                     return (
                                         <div key={schedule.id} className="flex items-center justify-between p-3 rounded-lg bg-yellow-50 border border-yellow-200 hover:bg-yellow-100 transition-colors">
                                             <div className="flex flex-col space-y-1">
-                                                <p className="font-medium text-yellow-800 flex items-center">
+                                                <p suppressHydrationWarning className="font-medium text-yellow-800 flex items-center">
                                                     <Calendar className="h-4 w-4 mr-2" />
                                                     {formattedDate}
                                                 </p>
@@ -126,7 +126,7 @@ export function ReplenishmentScheduleList({ schedules }: ReplenishmentScheduleLi
                                     return (
                                         <div key={schedule.id} className="flex items-center justify-between text-sm text-muted-foreground">
                                             <div className="flex-1 space-y-0.5">
-                                                <p className="font-medium">{schedule.quantity_to_order} uds. programadas para {formattedDate}</p>
+                                                <p suppressHydrationWarning className="font-medium">{schedule.quantity_to_order} uds. programadas para {formattedDate}</p>
                                                 {schedule.notes && <p className="truncate text-xs italic">{schedule.notes}</p>}
                                             </div>
                                             <Badge variant="outline" className={cn("ml-4", className)}>

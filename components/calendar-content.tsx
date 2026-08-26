@@ -73,7 +73,7 @@ export function CalendarContent({ onClose }: CalendarContentProps) {
               <div>
                 <p className="font-semibold">{app.patient_name || 'Paciente Desconocido'}</p>
                 <p className="text-sm text-gray-600">
-                  Vacuna: {app.vaccine_name || 'N/A'} - Fecha: <span className="font-medium text-blue-600">{formatNominalDate(app.date)}</span>
+                  Vacuna: {app.vaccine_name || 'N/A'} - Fecha: <span suppressHydrationWarning className="font-medium text-blue-600">{formatNominalDate(app.date)}</span>
                 </p>
               </div>
             </div>

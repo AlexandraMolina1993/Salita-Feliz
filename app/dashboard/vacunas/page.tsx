@@ -398,6 +398,7 @@ export default function VacunasPage() {
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500">Vencimiento:</span>
                       <span
+                        suppressHydrationWarning
                         className={`font-semibold ${
                           isExpired(vaccine.expiration_date)
                             ? "text-red-600"

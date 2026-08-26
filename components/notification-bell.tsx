@@ -216,7 +216,7 @@ export function NotificationBell() {
                         <span className="text-xs font-semibold text-foreground truncate">
                           {notif.title}
                         </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">
+                        <span suppressHydrationWarning className="text-[10px] text-muted-foreground shrink-0">
                           {formatTimestamp(notif.created_at)}
                         </span>
                       </div>

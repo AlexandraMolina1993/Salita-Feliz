@@ -134,7 +134,7 @@ export default function PatientDetailPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-600">Fecha de Nacimiento</label>
-                <p className="text-lg">{patient.birth_date.split("T")[0].split("-").reverse().join("/")}</p>
+                <p suppressHydrationWarning className="text-lg">{formatNominalDate(patient.birth_date)}</p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-600">Edad</label>
@@ -217,8 +217,8 @@ export default function PatientDetailPage() {
               
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Registro:</span>
-                <span className="text-sm">
-                  {new Date(patient.created_at).toLocaleDateString("es-AR")}
+                <span suppressHydrationWarning className="text-sm">
+                  {formatNominalDate(patient.created_at)}
                 </span>
               </div>
             </div>
@@ -338,7 +338,7 @@ export default function PatientDetailPage() {
             </p>
             <div className="flex items-center text-sm text-gray-600">
               <Calendar className="h-4 w-4 mr-2" />
-              <span>
+              <span suppressHydrationWarning>
                 {formatNominalDate(appointment.appointment_date)}
               </span>
             </div>

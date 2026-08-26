@@ -200,11 +200,11 @@ export default function VaccineDetailPage() {
                                 </span>
                             </p>
                         )}
-                        <p className="text-[11px] text-slate-400 mt-2 block sm:hidden">{dateDisplay}</p>
+                        <p suppressHydrationWarning className="text-[11px] text-slate-400 mt-2 block sm:hidden">{dateDisplay}</p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 shrink-0">
-                        <p className="text-xs text-slate-500 font-medium hidden sm:block">{dateDisplay}</p>
+                        <p suppressHydrationWarning className="text-xs text-slate-500 font-medium hidden sm:block">{dateDisplay}</p>
                         
                         {isDeletable && (
                             <Button
@@ -583,7 +583,7 @@ export default function VaccineDetailPage() {
                                         <Calendar className="h-6 w-6 text-amber-600" />
                                         <div>
                                             <p className="text-xs font-bold text-amber-800">Vencimiento del Lote</p>
-                                            <p className="text-sm font-black text-amber-700">{expirationDate}</p>
+                                            <p suppressHydrationWarning className="text-sm font-black text-amber-700">{expirationDate}</p>
                                         </div>
                                     </div>
                                 </div>

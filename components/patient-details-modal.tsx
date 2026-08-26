@@ -155,7 +155,7 @@ export function PatientDetailsModal({ patients, isOpen, onClose, title, descript
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-purple-500" />
                           <span className="text-gray-600">Nacimiento:</span>
-                          <span className="font-medium text-gray-800 text-xs">
+                          <span suppressHydrationWarning className="font-medium text-gray-800 text-xs">
                             {formatNominalDate(patient.birth_date)}
                           </span>
                         </div>

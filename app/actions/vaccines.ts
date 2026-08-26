@@ -805,4 +805,25 @@ export async function deleteVaccineIncidentAction(incidentId: string, vaccineId?
   revalidatePath('/dashboard/vacunas');
 }
 
+/**
+ * Server Action: Obtiene el análisis del motor de Run-Rate de vacunas sin disparar alertas externas.
+ */
+export async function getVaccineRunRateAction(daysWindow: number = 30) {
+  try {
+    const { calculateVaccineRunRate } = await import('@/services/aiNotificationService');
+    const analyses = await calculateVaccineRunRate(daysWindow);
+    return {
+      success: true,
+      data: analyses,
+    };
+  } catch (error) {
+    console.error('[VaccineAction] getVaccineRunRateAction falló:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al calcular run-rate',
+      data: [],
+    };
+  }
+}
+
 

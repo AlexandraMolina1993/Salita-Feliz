@@ -109,6 +109,7 @@ export function AppointmentDetailsModal({
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <span className="text-gray-600">Fecha:</span>
                           <span
+                            suppressHydrationWarning
                             className={`font-medium ${isToday(appointment.appointment_date) ? "text-blue-600" : ""}`}
                           >
                             {formatNominalDate(appointment.appointment_date)}
@@ -121,7 +122,7 @@ export function AppointmentDetailsModal({
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-gray-400" />
                           <span className="text-gray-600">Hora:</span>
-                          <span className="font-medium">{formatNominalTime(appointment.appointment_time, true)}</span>
+                          <span suppressHydrationWarning className="font-medium">{formatNominalTime(appointment.appointment_time, true)}</span>
                         </div>
 
                         {appointment.nurses && (

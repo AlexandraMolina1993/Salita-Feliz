@@ -65,13 +65,13 @@ export function RecentAppointments() {
           </Avatar>
           <div className="flex-1 space-y-1">
             <p className="text-sm font-medium leading-none">{appointment.patients?.full_name || "Paciente"}</p>
-            <p className="text-sm text-muted-foreground">
+            <p suppressHydrationWarning className="text-sm text-muted-foreground">
               {appointment.vaccines?.name || "Vacuna"} - {formatNominalDate(appointment.appointment_date)}
             </p>
           </div>
           <div className="text-right">
             {getStatusBadge(appointment.status)}
-            <p className="text-xs text-muted-foreground mt-1">{formatNominalTime(appointment.appointment_time, true)}</p>
+            <p suppressHydrationWarning className="text-xs text-muted-foreground mt-1">{formatNominalTime(appointment.appointment_time, true)}</p>
           </div>
         </div>
       ))}

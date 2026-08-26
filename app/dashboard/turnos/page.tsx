@@ -209,7 +209,7 @@ export default function TurnosPage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <CalendarClock className="h-4 w-4 text-gray-500" />
-                  <span>
+                  <span suppressHydrationWarning>
                     {formatFullSpanishDate(appointment.appointment_date)} a las {formatNominalTime(appointment.appointment_time, true)}
                   </span>
                 </div>

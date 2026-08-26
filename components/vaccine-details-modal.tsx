@@ -133,6 +133,7 @@ export function VaccineDetailsModal({ vaccines, isOpen, onClose, title, descript
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <span className="text-gray-600">Vence:</span>
                           <span
+                            suppressHydrationWarning
                             className={`text-xs font-medium ${
                               isExpired(vaccine.expiration_date)
                                 ? "text-red-600"

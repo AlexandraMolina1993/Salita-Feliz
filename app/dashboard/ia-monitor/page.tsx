@@ -61,6 +61,7 @@ import { supabase } from '@/lib/supabase';
 import type { AINotificationRecord } from '@/types/vaccine';
 import type { AppointmentRemindersBatchReport } from '@/types/appointmentReminder';
 import type { PredictiveStockReport } from '@/types/vaccine';
+import { formatUnifiedHistoryDate } from '@/lib/dateUtils';
 
 export default function AIMonitorPage() {
   const { toast } = useToast();
@@ -69,7 +70,7 @@ export default function AIMonitorPage() {
   const [logs, setLogs] = useState<AINotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     sent: 0,
@@ -360,8 +361,8 @@ export default function AIMonitorPage() {
             <span>Actualizar</span>
           </Button>
 
-          <span className="text-xs text-gray-500 dark:text-slate-500 hidden sm:inline-block">
-            Última sinc: {lastRefreshedAt.toLocaleTimeString()}
+          <span suppressHydrationWarning className="text-xs text-gray-500 dark:text-slate-500 hidden sm:inline-block">
+            Última sinc: {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString('es-AR') : 'Sincronizando...'}
           </span>
         </div>
       </div>
@@ -752,14 +753,7 @@ export default function AIMonitorPage() {
                     const alertInfo = getAlertTypeInfo(log);
                     const AlertIcon = alertInfo.icon;
                     const dateFormatted = log.created_at
-                      ? new Date(log.created_at).toLocaleString('es-AR', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })
+                      ? formatUnifiedHistoryDate(log.created_at)
                       : 'N/A';
 
                     return (
@@ -823,7 +817,7 @@ export default function AIMonitorPage() {
                         </td>
 
                         {/* Fecha */}
-                        <td className="py-3.5 px-4 text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                        <td suppressHydrationWarning className="py-3.5 px-4 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                           {dateFormatted}
                         </td>
 

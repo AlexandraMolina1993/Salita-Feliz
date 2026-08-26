@@ -59,7 +59,7 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
                     <TableRow key={patient.id}>
                       <TableCell>{patient.dni}</TableCell>
                       <TableCell>{patient.full_name}</TableCell>
-                      <TableCell>{formatNominalDate(patient.birth_date)}</TableCell>
+                      <TableCell suppressHydrationWarning>{formatNominalDate(patient.birth_date)}</TableCell>
                       <TableCell>{patient.gender === 'male'? 'Masculino': patient.gender === 'female' ? 'Femenino': patient.gender}</TableCell>
                     </TableRow>
                   )
@@ -151,7 +151,7 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
                           <Badge className="bg-rose-100 text-rose-800 border-rose-200">Sin Stock</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-slate-500 text-xs">{expDate}</TableCell>
+                      <TableCell suppressHydrationWarning className="text-slate-500 text-xs">{expDate}</TableCell>
                     </TableRow>
                   )
                 }
@@ -206,8 +206,8 @@ export function DashboardModal({ isOpen, onClose, title, data, type }: Dashboard
 
       return (
         <TableRow key={appointment.id}>
-          <TableCell>{formatNominalDate(appointment.appointment_date)}</TableCell>
-          <TableCell>{formatNominalTime(appointment.appointment_time, true)}</TableCell>
+          <TableCell suppressHydrationWarning>{formatNominalDate(appointment.appointment_date)}</TableCell>
+          <TableCell suppressHydrationWarning>{formatNominalTime(appointment.appointment_time, true)}</TableCell>
           <TableCell>{appointment.patients?.full_name || 'N/A'}</TableCell>
           <TableCell>{appointment.vaccines?.name || 'N/A'}</TableCell>
           <TableCell>

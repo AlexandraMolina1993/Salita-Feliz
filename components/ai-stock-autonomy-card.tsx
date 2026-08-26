@@ -40,6 +40,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { StockRunRateAnalysis, PredictiveStockReport } from '@/types/vaccine';
 import Link from 'next/link';
 
+import { getVaccineRunRateAction } from '@/app/actions/vaccines';
+
 interface AIStockAutonomyCardProps {
   /** Si se pasa vaccineId, el componente muestra el diagnóstico específico para esa vacuna */
   vaccineId?: string;
@@ -69,13 +71,12 @@ export function AIStockAutonomyCard({
   const fetchRunRateData = async (days: number) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/ai/predictive-stock?days=${days}`);
-      const json = await res.json();
+      const res = await getVaccineRunRateAction(days);
 
-      if (json.success && Array.isArray(json.data)) {
-        setAnalyses(json.data);
+      if (res.success && Array.isArray(res.data)) {
+        setAnalyses(res.data);
       } else {
-        throw new Error(json.error || 'Error al obtener diagnóstico predictivo.');
+        throw new Error(res.error || 'Error al obtener diagnóstico predictivo.');
       }
     } catch (error) {
       console.error('[AIStockAutonomyCard] Error al cargar análisis:', error);

@@ -1,12 +1,11 @@
 // lib/actions.ts
-'use server';
-
 export {
     addVaccineStockAction,
     scheduleReplenishmentAction,
     reportVaccineIncidentAction,
     deleteReplenishmentScheduleAction,
     deleteVaccineIncidentAction,
+    getVaccineRunRateAction,
     type AddStockInput,
     type ScheduleReplenishmentInput,
     type ReportIncidentInput,

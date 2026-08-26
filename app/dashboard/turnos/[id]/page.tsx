@@ -172,7 +172,7 @@ export default function AppointmentDetailPage() {
                 </div>
                 <div>
                   <CardTitle className="text-xl">Turno de Vacunación</CardTitle>
-                  <CardDescription>
+                  <CardDescription suppressHydrationWarning>
                     {formatFullSpanishDate(appointment.appointment_date)}
                   </CardDescription>
                 </div>

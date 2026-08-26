@@ -93,8 +93,48 @@ export function getArgentinaTargetDateString(hoursAhead: number = 24, customDate
   return formatter.format(new Date(targetMs));
 }
 
+const SPANISH_MONTHS = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+const SPANISH_MONTHS_SHORT = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+const SPANISH_DAYS = [
+  'Domingo',
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+];
+
 /**
- * Formatea una fecha a texto estándar argentino:
+ * Formatea una fecha a texto estándar argentino de forma 100% determinista (evita Hydration Mismatch):
  * - 'short': "17/08/2026"
  * - 'short-text': "17 de ago. de 2026"
  * - 'medium': "17 de agosto de 2026"
@@ -108,27 +148,34 @@ export function formatNominalDate(
   const d = parseLocalDate(dateInput);
   if (!d) return typeof dateInput === 'string' ? dateInput : 'N/A';
 
+  const dayNum = d.getDate();
+  const dayStr = String(dayNum).padStart(2, '0');
+  const monthIdx = d.getMonth();
+  const monthStr = String(monthIdx + 1).padStart(2, '0');
+  const year = d.getFullYear();
+
   if (style === 'short') {
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
+    return `${dayStr}/${monthStr}/${year}`;
   }
 
-  const formatter = new Intl.DateTimeFormat('es-AR', {
-    weekday: style === 'full' ? 'long' : undefined,
-    year: 'numeric',
-    month: style === 'short-text' ? 'short' : 'long',
-    day: 'numeric',
-  });
+  const shortMonth = SPANISH_MONTHS_SHORT[monthIdx] || monthStr;
+  const fullMonth = SPANISH_MONTHS[monthIdx] || monthStr;
 
-  const formatted = formatter.format(d);
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  if (style === 'short-text') {
+    return `${dayNum} de ${shortMonth}. de ${year}`;
+  }
+
+  if (style === 'medium') {
+    return `${dayNum} de ${fullMonth} de ${year}`;
+  }
+
+  const dayOfWeek = SPANISH_DAYS[d.getDay()] || '';
+  return `${dayOfWeek}, ${dayNum} de ${fullMonth} de ${year}`;
 }
 
 /**
  * Formatea la fecha de un elemento del historial unificado (replenishment, incident, movement, consumption).
- * Previene el desfase de zona horaria (UTC-3) para fechas nominales y muestra hora sólo cuando es un timestamp real.
+ * Previene el desfase de zona horaria (UTC-3) para fechas nominales y es 100% determinista entre SSR y cliente.
  */
 export function formatUnifiedHistoryDate(
   dateInput: string | Date | null | undefined,
@@ -146,11 +193,11 @@ export function formatUnifiedHistoryDate(
   if (isDateOnly) {
     const d = parseLocalDate(dateInput);
     if (!d) return typeof dateInput === 'string' ? dateInput : 'N/A';
-    return new Intl.DateTimeFormat('es-AR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }).format(d);
+    const dayNum = d.getDate();
+    const monthIdx = d.getMonth();
+    const shortMonth = SPANISH_MONTHS_SHORT[monthIdx] || '';
+    const year = d.getFullYear();
+    return `${dayNum} de ${shortMonth}. de ${year}`;
   }
 
   // Timestamp real con hora (created_at en UTC)
@@ -159,14 +206,17 @@ export function formatUnifiedHistoryDate(
     return typeof dateInput === 'string' ? dateInput : 'N/A';
   }
 
-  return new Intl.DateTimeFormat('es-AR', {
-    timeZone: CLINIC_TIMEZONE,
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(d);
+  // Convertir a hora de Argentina (UTC-3)
+  const utcMs = d.getTime();
+  const arDate = new Date(utcMs - 3 * 60 * 60 * 1000);
+  const dayNum = arDate.getUTCDate();
+  const monthIdx = arDate.getUTCMonth();
+  const shortMonth = SPANISH_MONTHS_SHORT[monthIdx] || '';
+  const year = arDate.getUTCFullYear();
+  const hh = String(arDate.getUTCHours()).padStart(2, '0');
+  const mm = String(arDate.getUTCMinutes()).padStart(2, '0');
+
+  return `${dayNum} de ${shortMonth}. de ${year}, ${hh}:${mm} hs`;
 }
 
 /**
