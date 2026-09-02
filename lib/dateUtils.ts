@@ -76,12 +76,60 @@ export function getArgentinaTodayDateString(): string {
 }
 
 /**
+ * Obtiene estrictamente la fecha de MAÑANA en el calendario de Argentina (UTC-3).
+ * Suma 1 día calendario a la fecha oficial actual de Argentina en formato "YYYY-MM-DD".
+ */
+export function getArgentinaTomorrowDateString(): string {
+  const todayStr = getArgentinaTodayDateString();
+  const [year, month, day] = todayStr.split('-').map(Number);
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+  return nextDay.toISOString().split('T')[0];
+}
+
+/**
+ * Obtiene un diagnóstico completo del estado de fecha y hora entre el servidor (UTC)
+ * y la hora oficial de la clínica en Argentina (UTC-3).
+ */
+export function getArgentinaCurrentDateTimeInfo(): {
+  nowUTC: string;
+  nowArgentina: string;
+  todayArgentina: string;
+  tomorrowArgentina: string;
+  timezone: string;
+} {
+  const now = new Date();
+  const arFormatter = new Intl.DateTimeFormat('es-AR', {
+    timeZone: CLINIC_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  return {
+    nowUTC: now.toISOString(),
+    nowArgentina: arFormatter.format(now),
+    todayArgentina: getArgentinaTodayDateString(),
+    tomorrowArgentina: getArgentinaTomorrowDateString(),
+    timezone: `${CLINIC_TIMEZONE} (UTC-3)`,
+  };
+}
+
+/**
  * Obtiene la fecha objetivo en Argentina sumando N horas al momento actual (o fecha personalizada).
+ * Si hoursAhead es 24 (el valor estándar de recordatorios), asegura la fecha de mañana en Argentina.
  * Retorna fecha en formato "YYYY-MM-DD".
  */
 export function getArgentinaTargetDateString(hoursAhead: number = 24, customDate?: string): string {
   if (customDate) {
     return formatDateToISO(customDate);
+  }
+  // Si son 24 horas estándar para recordatorio previo, forzamos estrictamente el día de mañana en Argentina
+  if (hoursAhead === 24) {
+    return getArgentinaTomorrowDateString();
   }
   const targetMs = Date.now() + hoursAhead * 60 * 60 * 1000;
   const formatter = new Intl.DateTimeFormat('en-CA', {

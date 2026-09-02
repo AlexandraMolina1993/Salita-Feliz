@@ -113,6 +113,22 @@ export interface RunAppointmentRemindersOptions {
 }
 
 /**
+ * Reporte de lote devuelto por el motor de recordatorios de turnos (24 Horas).
+ */
+export interface AppointmentRemindersBatchReport {
+  timestamp: string;
+  window_hours: number;
+  target_date_analyzed: string;
+  total_scheduled_found: number;
+  already_notified_count: number;
+  reminders_attempted: number;
+  reminders_sent: number;
+  reminders_failed: number;
+  reminders_skipped: number;
+  results: AppointmentReminderDispatchResult[];
+}
+
+/**
  * Tipos para Flujo 2: Cancelación por Inviabilidad Clínica
  */
 export interface ClinicalInfeasibilityRisk {

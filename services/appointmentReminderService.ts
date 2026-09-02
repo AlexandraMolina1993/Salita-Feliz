@@ -14,6 +14,8 @@ import {
   CLINIC_TIMEZONE,
   getArgentinaTargetDateString,
   getArgentinaTodayDateString,
+  getArgentinaTomorrowDateString,
+  getArgentinaCurrentDateTimeInfo,
   formatFullSpanishDate,
   formatNominalTime,
   formatNominalDate,
@@ -126,6 +128,18 @@ export async function getUpcomingAppointmentsForReminders(
 ): Promise<UpcomingAppointment[]> {
   const { hoursAhead = 24, targetDate, specificAppointmentId, startDate, endDate } = options;
   const targetDateStr = getTargetReminderDate(hoursAhead, targetDate);
+  const dtInfo = getArgentinaCurrentDateTimeInfo();
+
+  console.log('--------------------------------------------------------------------------------');
+  console.log('🔍 [AppointmentReminderService] Consultando turnos para recordatorio:');
+  console.log(`   ⏰ Timestamp Servidor (UTC): ${dtInfo.nowUTC}`);
+  console.log(`   🇦🇷 Hora Oficial Argentina (UTC-3): ${dtInfo.nowArgentina}`);
+  console.log(`   📅 Hoy en Argentina: ${dtInfo.todayArgentina}`);
+  console.log(`   📅 Mañana en Argentina: ${dtInfo.tomorrowArgentina}`);
+  console.log(`   🎯 Fecha Objetivo de Consulta: "${targetDateStr}" (Ventana horas: ${hoursAhead})`);
+  if (specificAppointmentId) console.log(`   🎯 Turno Específico ID: ${specificAppointmentId}`);
+  if (startDate && endDate) console.log(`   🎯 Rango de Fechas: ${startDate} al ${endDate}`);
+  console.log('--------------------------------------------------------------------------------');
 
   // 1. Construir query base a appointments con joins a pacientes, vacunas y enfermeros
   let query = supabase
@@ -181,16 +195,20 @@ export async function getUpcomingAppointmentsForReminders(
   const { data: rawAppointments, error } = await query;
 
   if (error) {
-    console.error('[AppointmentReminderService] Error al consultar turnos en Supabase:', error);
+    console.error('❌ [AppointmentReminderService] Error al consultar turnos en Supabase:', error.message);
     throw new Error(`Error al consultar turnos próximos: ${error.message}`);
   }
 
+  console.log(`📊 [AppointmentReminderService] Turnos programados encontrados en DB para "${targetDateStr}": ${rawAppointments?.length || 0}`);
+
   if (!rawAppointments || rawAppointments.length === 0) {
+    console.log(`ℹ️ [AppointmentReminderService] No hay turnos programados (status: 'scheduled') para la fecha objetivo ${targetDateStr}.`);
     return [];
   }
 
   // 2. Consultar el historial de notificaciones recientes para deduplicación
   const sinceDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  console.log(`🔍 [AppointmentReminderService] Verificando historial de notificaciones desde: ${sinceDate}...`);
   const { data: sentNotifications, error: notifError } = await supabase
     .from('notifications')
     .select('patient_id, title, message, created_at, status')
@@ -198,7 +216,7 @@ export async function getUpcomingAppointmentsForReminders(
     .eq('status', 'SENT');
 
   if (notifError) {
-    console.warn('[AppointmentReminderService] Advertencia al consultar notifications para deduplicación:', notifError.message);
+    console.warn('⚠️ [AppointmentReminderService] Advertencia al consultar notifications para deduplicación:', notifError.message);
   }
 
   const notificationsByPatient = new Map<string, Array<{ title: string; message: string; created_at: string }>>();
@@ -279,6 +297,13 @@ export async function getUpcomingAppointmentsForReminders(
       last_notification_at: lastNotifiedAt,
     };
   });
+
+  const alreadyNotifiedTotal = formattedAppointments.filter((a) => a.already_notified).length;
+  const pendingTotal = formattedAppointments.length - alreadyNotifiedTotal;
+  console.log(`📋 [AppointmentReminderService] Resumen de Turnos para Procesar:`);
+  console.log(`   - Total recuperados de Supabase: ${formattedAppointments.length}`);
+  console.log(`   - Ya notificados en las últimas 48h (Deduplicados): ${alreadyNotifiedTotal}`);
+  console.log(`   - Pendientes de envío en este ciclo: ${pendingTotal}`);
 
   return formattedAppointments;
 }
@@ -756,7 +781,7 @@ Le informamos que su turno para la vacuna <b>${vaccineName}</b> del día <b>${da
     appointment_date_formatted: dateFormatted,
     appointment_time_formatted: timeFormatted,
     clinical_reason: clinicalReason,
-    reschedulingInstructions: instructions,
+    rescheduling_instructions: instructions,
     email_html: emailHtml,
     chat_message: chatMessage,
     summary,
@@ -781,6 +806,7 @@ export async function sendPatientEmailNotification(
 
   if (!cleanEmail || !cleanEmail.includes('@')) {
     const errorMsg = 'El paciente no posee un correo electrónico válido registrado.';
+    console.warn(`⚠️ [PatientNotificationEmail] Paciente ID "${patientId}" sin email válido (${recipientEmail || 'vacío'}).`);
     const logId = await logPatientNotification({
       patientId,
       channel: 'EMAIL',
@@ -792,10 +818,18 @@ export async function sendPatientEmailNotification(
   }
 
   const senderEmail = process.env.EMAIL_FROM || 'salitafeliz8@gmail.com';
+  console.log(`📧 [PatientNotificationEmail] Iniciando despacho de email para Paciente ID "${patientId}" a <${cleanEmail}> | Asunto: "${subject}"`);
 
   try {
     // 1. Resend API
     if (process.env.RESEND_API_KEY) {
+      const recipient = process.env.RESEND_TO_OVERRIDE || cleanEmail;
+      const resendFrom = senderEmail.includes('@') && !senderEmail.endsWith('@gmail.com')
+        ? `Salita Feliz <${senderEmail}>`
+        : 'Salita Feliz <onboarding@resend.dev>';
+
+      console.log(`📤 [PatientNotificationEmail] Enviando petición a Resend API (From: ${resendFrom}, To: ${recipient})...`);
+
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -803,14 +837,16 @@ export async function sendPatientEmailNotification(
           Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: `Salita Feliz <${senderEmail.includes('@resend') ? senderEmail : 'onboarding@resend.dev'}>`,
-          to: ['alexandratejeda78@gmail.com'],
+          from: resendFrom,
+          to: [recipient],
           subject,
           html: htmlContent,
         }),
       });
 
       if (resendRes.ok) {
+        const resendData = await resendRes.json().catch(() => ({}));
+        console.log(`✅ [PatientNotificationEmail] Resend API envió con éxito (HTTP ${resendRes.status}). Email ID: ${resendData?.id || 'OK'}`);
         const logId = await logPatientNotification({
           patientId,
           channel: 'EMAIL',
@@ -820,8 +856,11 @@ export async function sendPatientEmailNotification(
         });
         return { success: true, logId: logId || undefined };
       } else {
-        const errText = await resendRes.text();
-        console.warn('[PatientNotificationEmail] Resend API devolvió error:', errText);
+        const errText = await resendRes.text().catch(() => 'No body');
+        console.error(`❌ [PatientNotificationEmail] Resend API devolvió error (HTTP ${resendRes.status}):`, errText);
+        if (resendRes.status === 403 || errText.includes('validation_error') || errText.includes('testing emails')) {
+          console.error(`💡 [PatientNotificationEmail] Diagnóstico Resend: La cuenta gratuita con 'onboarding@resend.dev' únicamente permite enviar correos a la dirección del propietario de la cuenta Resend o dominios verificados.`);
+        }
       }
     }
 
@@ -830,18 +869,39 @@ export async function sendPatientEmailNotification(
     const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS;
 
     if (gmailUser && gmailPass) {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: gmailUser, pass: gmailPass },
-      });
+      console.log(`📤 [PatientNotificationEmail] Intentando despacho alternativo vía Nodemailer SMTP (${gmailUser})...`);
+      try {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: gmailUser, pass: gmailPass },
+        });
 
-      await transporter.sendMail({
-        from: `"Salita Feliz - Vacunatorio" <${senderEmail}>`,
-        to: cleanEmail,
-        subject,
-        html: htmlContent,
-      });
+        const info = await transporter.sendMail({
+          from: `"Salita Feliz - Vacunatorio" <${gmailUser}>`,
+          to: cleanEmail,
+          subject,
+          html: htmlContent,
+        });
 
+        console.log(`✅ [PatientNotificationEmail] Correo enviado exitosamente vía Nodemailer SMTP. Message ID: ${info.messageId}`);
+
+        const logId = await logPatientNotification({
+          patientId,
+          channel: 'EMAIL',
+          title: subject,
+          message: htmlContent,
+          status: 'SENT',
+        });
+
+        return { success: true, logId: logId || undefined };
+      } catch (smtpErr) {
+        console.error('❌ [PatientNotificationEmail] Error al enviar correo vía Nodemailer SMTP:', smtpErr);
+      }
+    }
+
+    // 3. Fallback de persistencia y simulación para entornos sin proveedor configurado
+    if (process.env.NODE_ENV === 'development' || (!process.env.RESEND_API_KEY && !gmailPass)) {
+      console.log(`⚠️ [PatientNotificationEmail] Sin proveedor de correo en producción. Simulando despacho a <${cleanEmail}> y registrando en tabla notifications.`);
       const logId = await logPatientNotification({
         patientId,
         channel: 'EMAIL',
@@ -853,20 +913,20 @@ export async function sendPatientEmailNotification(
       return { success: true, logId: logId || undefined };
     }
 
-    // 3. Fallback de persistencia y simulación para entornos de desarrollo local
-    console.log(`[PatientNotificationEmail] Simulación de despacho a ${cleanEmail}. Registrando en tabla notifications.`);
+    const failedMsg = 'No se pudo enviar el correo: Resend API falló y no hay credenciales SMTP de respaldo disponibles.';
+    console.error(`❌ [PatientNotificationEmail] ${failedMsg}`);
     const logId = await logPatientNotification({
       patientId,
       channel: 'EMAIL',
       title: subject,
-      message: htmlContent,
-      status: 'SENT',
+      message: `Error: ${failedMsg}`,
+      status: 'FAILED',
     });
 
-    return { success: true, logId: logId || undefined };
+    return { success: false, logId: logId || undefined, error: failedMsg };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Error desconocido al enviar correo.';
-    console.error('[PatientNotificationEmail] Excepción en envío:', errorMsg);
+    console.error(`❌ [PatientNotificationEmail] Excepción crítica al enviar correo a <${cleanEmail}>:`, error);
 
     const logId = await logPatientNotification({
       patientId,
@@ -897,6 +957,7 @@ export async function sendPatientTelegramNotification(
 
   if (!telegramToken || !telegramChatId) {
     const err = "Faltan las credenciales de Telegram en el servidor.";
+    console.warn(`⚠️ [PatientNotificationTelegram] Faltan credenciales de Telegram para paciente ID "${patientId}".`);
     const logId = await logPatientNotification({
       patientId,
       channel: "TELEGRAM",
@@ -910,8 +971,10 @@ export async function sendPatientTelegramNotification(
   }
 
   // Logs de depuración en servidor
-  console.log("🔍 [sendPatientTelegramNotification] TOKEN:", telegramToken);
-  console.log("🔍 [sendPatientTelegramNotification] CHAT ID:", telegramChatId);
+  const maskedToken = telegramToken.length > 10 ? `${telegramToken.slice(0, 8)}...${telegramToken.slice(-4)}` : '***';
+  console.log(`🤖 [PatientNotificationTelegram] Despachando a Telegram para Paciente ID "${patientId}":`);
+  console.log(`   - Bot Token: ${maskedToken}`);
+  console.log(`   - Chat ID: ${telegramChatId}`);
 
   try {
     // 2. Enviar el mensaje a la API oficial de Telegram
@@ -926,16 +989,16 @@ export async function sendPatientTelegramNotification(
       }),
     });
 
-    const telegramData = await response.json();
+    const telegramData = await response.json().catch(() => ({}));
 
-    console.log("============== DEBUG TELEGRAM ==============");
-    console.log("Status Code que devolvió Telegram:", response.status);
-    console.log("Respuesta completa:", JSON.stringify(telegramData, null, 2));
-    console.log("============================================");
+    console.log("============== [DEBUG TELEGRAM API] ==============");
+    console.log("Status Code HTTP devuelto por Telegram:", response.status);
+    console.log("Respuesta completa de Telegram:", JSON.stringify(telegramData, null, 2));
+    console.log("==================================================");
 
     if (!response.ok || !telegramData.ok) {
       const errorMsg = `Telegram rechazó el mensaje: ${JSON.stringify(telegramData)}`;
-      console.error("🔴 Error de Telegram API:", telegramData);
+      console.error("🔴 [PatientNotificationTelegram] Error de Telegram API:", telegramData);
       const logId = await logPatientNotification({
         patientId,
         channel: "TELEGRAM",
@@ -947,6 +1010,8 @@ export async function sendPatientTelegramNotification(
       });
       return { success: false, logId: logId || undefined, error: errorMsg };
     }
+
+    console.log(`✅ [PatientNotificationTelegram] Telegram entregó el mensaje con éxito. Message ID: ${telegramData.result?.message_id || 'OK'}`);
 
     // 3. Guardar en Supabase asegurando título seguro y estado SENT
     const asuntoSeguro = title && title.trim() !== "" ? title : "Notificación de Turno";
@@ -964,7 +1029,7 @@ export async function sendPatientTelegramNotification(
     return { success: true, logId: logId || undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Error inesperado al conectar con Telegram API";
-    console.error("🔴 CRITICAL ERROR en sendPatientTelegramNotification:", error);
+    console.error("🔴 [PatientNotificationTelegram] Excepción crítica al conectar con Telegram API:", error);
     const logId = await logPatientNotification({
       patientId,
       channel: "TELEGRAM",
@@ -999,6 +1064,18 @@ export async function run24HourAppointmentReminders(
 
   const targetDateStr = getTargetReminderDate(hoursAhead, targetDate);
   const timestamp = new Date().toISOString();
+  const dtInfo = getArgentinaCurrentDateTimeInfo();
+
+  console.log('================================================================================');
+  console.log('🚀 [run24HourAppointmentReminders] INICIANDO MOTOR DE RECORDATORIOS');
+  console.log(`   ⏰ Timestamp Servidor (UTC): ${dtInfo.nowUTC}`);
+  console.log(`   🇦🇷 Hora Oficial Argentina (UTC-3): ${dtInfo.nowArgentina}`);
+  console.log(`   📅 Hoy en Argentina: ${dtInfo.todayArgentina}`);
+  console.log(`   📅 Mañana en Argentina: ${dtInfo.tomorrowArgentina}`);
+  console.log(`   🎯 Fecha Objetivo Analizada: "${targetDateStr}" (Ventana horas: ${hoursAhead})`);
+  console.log(`   ⚙️ Opciones: forceResend=${forceResend}, notifyEmail=${notifyEmail}, notifyTelegram=${notifyTelegram}`);
+  if (specificAppointmentId) console.log(`   🎯 Turno Específico ID: ${specificAppointmentId}`);
+  console.log('================================================================================');
 
   const appointments = await getUpcomingAppointmentsForReminders({
     hoursAhead,
@@ -1015,6 +1092,7 @@ export async function run24HourAppointmentReminders(
   for (const app of appointments) {
     if (app.already_notified && !forceResend) {
       skippedCount++;
+      console.log(`⏭️ [run24HourAppointmentReminders] Omitiendo Turno ID ${app.id} (${app.patient.full_name}): Ya notificado previamente (${app.last_notification_at}).`);
       results.push({
         appointment_id: app.id,
         patient_id: app.patient_id,
@@ -1035,6 +1113,7 @@ export async function run24HourAppointmentReminders(
     }
 
     try {
+      console.log(`🔔 [run24HourAppointmentReminders] Procesando Turno ID ${app.id} | Paciente: ${app.patient.full_name} | Vacuna: ${app.vaccine.name} | Fecha: ${app.appointment_date} ${app.appointment_time}`);
       const aiContent = await generateAppointmentReminderWithAI(app);
       let anyChannelSuccess = false;
 
@@ -1069,6 +1148,8 @@ export async function run24HourAppointmentReminders(
         dispatchResult.channels.email.log_id = emailRes.logId;
         dispatchResult.channels.email.error = emailRes.error;
         if (emailRes.success) anyChannelSuccess = true;
+      } else if (notifyEmail && !app.patient.email) {
+        console.warn(`⚠️ [run24HourAppointmentReminders] Paciente ${app.patient.full_name} no tiene email registrado.`);
       }
 
       // Despacho por Telegram
@@ -1086,6 +1167,15 @@ export async function run24HourAppointmentReminders(
         if (tgRes.success) anyChannelSuccess = true;
       }
 
+      const emailStatus = dispatchResult.channels.email.attempted
+        ? (dispatchResult.channels.email.success ? '✅ Enviado' : `❌ Falló (${dispatchResult.channels.email.error || 'Error'})`)
+        : '⚪ No intentado';
+      const tgStatus = dispatchResult.channels.telegram.attempted
+        ? (dispatchResult.channels.telegram.success ? '✅ Enviado' : `❌ Falló (${dispatchResult.channels.telegram.error || 'Error'})`)
+        : '⚪ No intentado';
+
+      console.log(`📬 [run24HourAppointmentReminders] Resultado Turno ID ${app.id}: Email=${emailStatus} | Telegram=${tgStatus}`);
+
       if (anyChannelSuccess) {
         sentCount++;
         dispatchResult.status = 'SENT';
@@ -1093,13 +1183,14 @@ export async function run24HourAppointmentReminders(
         failedCount++;
         dispatchResult.status = 'FAILED';
         dispatchResult.error = 'No se pudo despachar por ninguno de los canales configurados.';
+        console.error(`❌ [run24HourAppointmentReminders] No se pudo notificar al paciente ${app.patient.full_name} por ningún canal.`);
       }
 
       results.push(dispatchResult);
     } catch (err) {
       failedCount++;
       const errMsg = err instanceof Error ? err.message : 'Error inesperado procesando turno.';
-      console.error(`[run24HourAppointmentReminders] Error en turno ${app.id}:`, errMsg);
+      console.error(`💥 [run24HourAppointmentReminders] Error crítico procesando turno ${app.id}:`, errMsg);
       results.push({
         appointment_id: app.id,
         patient_id: app.patient_id,
@@ -1118,6 +1209,14 @@ export async function run24HourAppointmentReminders(
       });
     }
   }
+
+  console.log('================================================================================');
+  console.log('🏁 [run24HourAppointmentReminders] REPORTE FINAL DEL CICLO:');
+  console.log(`   📊 Total Turnos Encontrados: ${appointments.length}`);
+  console.log(`   📨 Recordatorios Enviados con Éxito: ${sentCount}`);
+  console.log(`   ⏭️ Recordatorios Omitidos (Deduplicación): ${skippedCount}`);
+  console.log(`   ❌ Recordatorios Fallidos: ${failedCount}`);
+  console.log('================================================================================');
 
   return {
     timestamp,
