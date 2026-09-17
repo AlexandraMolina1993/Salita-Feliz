@@ -125,7 +125,6 @@ export default function DashboardPage() {
   const totalMl = vaccineStockList.reduce((acc, v) => acc + (Number(v.total_ml ?? v.current_stock_ml) || 0), 0);
 
   const vacunasOptimas = vaccineStockList.filter((v) => v.stock_status === 'OPTIMAL');
-  const vacunasBajoStock = vaccineStockList.filter((v) => v.stock_status === 'CRITICAL_LOW');
   const vacunasAgotadas = vaccineStockList.filter((v) => v.stock_status === 'OUT_OF_STOCK');
 
   const isExpiringSoon = (expirationDate: string | null) => {
@@ -145,7 +144,7 @@ export default function DashboardPage() {
   const vacunasVencidas = vaccineStockList.filter((v) => isExpired(v.expiration_date));
 
   const pctOptimas = Math.round((vacunasOptimas.length / totalVacunasCount) * 100);
-  const pctBajoStock = Math.round((vacunasBajoStock.length / totalVacunasCount) * 100);
+  const pctVencidas = Math.round((vacunasVencidas.length / totalVacunasCount) * 100);
   const pctAgotadas = Math.round((vacunasAgotadas.length / totalVacunasCount) * 100);
   const pctPorVencer = Math.round((vacunasPorVencer.length / totalVacunasCount) * 100);
 
@@ -267,7 +266,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="w-full h-7 bg-slate-100 rounded-lg flex overflow-hidden shadow-inner border border-slate-200/50">
                   {pctOptimas > 0 && <div style={{ width: `${pctOptimas}%` }} className="bg-emerald-500 transition-all duration-500" title="Stock Óptimo" />}
-                  {pctBajoStock > 0 && <div style={{ width: `${pctBajoStock}%` }} className="bg-amber-400 transition-all duration-500" title="Stock Bajo" />}
+                  {pctVencidas > 0 && <div style={{ width: `${pctVencidas}%` }} className="bg-stone-500 transition-all duration-500" title="Vencidas" />}
                   {pctAgotadas > 0 && <div style={{ width: `${pctAgotadas}%` }} className="bg-rose-500 transition-all duration-500" title="Sin Stock" />}
                   {pctPorVencer > 0 && <div style={{ width: `${pctPorVencer}%` }} className="bg-purple-400 transition-all duration-500" title="Por Vencer" />}
                 </div>
@@ -281,11 +280,11 @@ export default function DashboardPage() {
                   onClick={() => openModal("Vacunas con Stock Óptimo", vacunasOptimas, 'vaccines')}
                 />
                 <StockLegendItem
-                  dotColor="bg-amber-400"
-                  label="Stock Bajo Mínimo"
-                  value={`${vacunasBajoStock.length} vacunas`}
-                  textColor="text-amber-700 font-bold"
-                  onClick={() => openModal("Vacunas con Stock Bajo", vacunasBajoStock, 'vaccines')}
+                  dotColor="bg-stone-500"
+                  label="Vencidas"
+                  value={`${vacunasVencidas.length} lotes`}
+                  textColor="text-stone-700 font-bold"
+                  onClick={() => openModal("Vacunas Vencidas", vacunasVencidas, 'vaccines')}
                 />
                 <StockLegendItem
                   dotColor="bg-rose-500"
@@ -448,7 +447,7 @@ function MiniCard({ title, value, icon, subtitle, badge, onClick }: MiniCardProp
           <h3 className="text-3xl font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">{value}</h3>
         </div>
         <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg group-hover:bg-slate-100 transition-colors">
-          {React.cloneElement(icon as React.ReactElement, { className: 'h-5 w-5' })}
+          {React.cloneElement(icon as React.ReactElement<any>, { className: 'h-5 w-5' })}
         </div>
       </div>
       <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-xs">

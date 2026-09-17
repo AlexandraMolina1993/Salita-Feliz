@@ -27,27 +27,31 @@ interface AdminSignupData {
 
 
 export async function fetchAdminProfile(): Promise<AdminProfile | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-        return null;
-    }
+    if (!user) {
+        return null;
+    }
 
-    // 2. Consultar la tabla admin_profiles
-    const { data, error } = await supabase
-        .from('admin_profiles')
-        .select('*')
-        .eq('id', user.id)
-        // ❌ ELIMINA .single() TEMPORALMENTE ❌
-        // .single(); 
+    // 2. Consultar la tabla admin_profiles
+    const { data, error } = await supabase
+        .from('admin_profiles')
+        .select('*')
+        .eq('id', user.id);
 
-    if (error || !data || data.length === 0) { // Verifica si no hay datos
-        console.error("Error al cargar el perfil del administrador:", error || 'Perfil no encontrado');
-        return null;
-    }
+    if (error || !data || data.length === 0) { // Verifica si no hay datos
+        console.error("Error al cargar el perfil del administrador:", error || 'Perfil no encontrado');
+        return null;
+    }
 
-    // Devuelve el primer elemento del array, si existe
-    return data[0] as AdminProfile;
+    // Devuelve el primer elemento del array, si existe
+    const profile = data[0] as AdminProfile;
+    // Sincronizar avatar_url desde user_metadata si no está en la tabla
+    if (!profile.avatar_url && user.user_metadata?.avatar_url) {
+        profile.avatar_url = user.user_metadata.avatar_url;
+    }
+
+    return profile;
 }
 
 // ----------------------------------------------------
@@ -70,61 +74,54 @@ export async function signupAdmin({
     emergencyContactName, 
     emergencyContactPhone 
 }: AdminSignupData): Promise<{ success: boolean; error: string | null }> {
-    
-    // 1. Crear el usuario en Supabase Auth (automáticamente inicia sesión)
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-    });
+    
+    // 1. Crear el usuario en Supabase Auth (automáticamente inicia sesión)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+    });
 
-    if (authError) {
-        return { success: false, error: authError.message };
-    }
+    if (authError) {
+        return { success: false, error: authError.message };
+    }
 
-    const userId = authData.user?.id;
+    const userId = authData.user?.id;
 
-    if (!userId) {
-        // Esto es raro si auth.signUp fue exitoso, pero es buena práctica verificar
-        return { success: false, error: "Registro de usuario exitoso, pero el ID de usuario es nulo." };
-    }
+    if (!userId) {
+        return { success: false, error: "Registro de usuario exitoso, pero el ID de usuario es nulo." };
+    }
 
-    // Preparación de datos (Convertir strings vacíos a null para campos de fecha)
-    const cleanBirthDate = birthDate || null; 
-    const cleanHireDate = hireDate || null; 
+    // Preparación de datos (Convertir strings vacíos a null para campos de fecha)
+    const cleanBirthDate = birthDate || null; 
+    const cleanHireDate = hireDate || null; 
 
-    // 2. Insertar el perfil inicial en la tabla 'admin_profiles'
-    const { error: profileError } = await supabase
-        .from('admin_profiles') 
-        .insert({
-            // Mapeo de columnas
-            id: userId, 
-            email: email,
-            role: 'Administrador', 
-            name: name,
-            phone: phone, 
-            idNumber: idNumber, 
-            address: address,
-            birthDate: cleanBirthDate, 
-            gender: gender,
-            hireDate: cleanHireDate,
-            emergencyContactName: emergencyContactName,
-            emergencyContactPhone: emergencyContactPhone,
-            // Si tienes una columna 'is_active' que no acepta null, puedes descomentar:
-            // is_active: true, 
-        });
+    // 2. Insertar el perfil inicial en la tabla 'admin_profiles'
+    const { error: profileError } = await supabase
+        .from('admin_profiles') 
+        .insert({
+            id: userId, 
+            email: email, 
+            role: 'Administrador', 
+            name: name, 
+            phone: phone, 
+            idNumber: idNumber, 
+            address: address, 
+            birthDate: cleanBirthDate, 
+            gender: gender, 
+            hireDate: cleanHireDate, 
+            emergencyContactName: emergencyContactName, 
+            emergencyContactPhone: emergencyContactPhone, 
+        });
 
-    if (profileError) {
-        console.error("Error al crear el perfil de administrador (Supabase detail):", profileError);
-        // Si el perfil falla, deberías considerar eliminar el usuario de Auth,
-        // pero por ahora, solo devolvemos el error.
-        return { 
-            success: false, 
-            error: profileError.message || "Registro de perfil fallido. Faltan datos obligatorios o hay un error de base de datos." 
-        };
-    }
-    
-    // El usuario está registrado y logueado, y los datos de perfil existen.
-    return { success: true, error: null };
+    if (profileError) {
+        console.error("Error al crear el perfil de administrador (Supabase detail):", profileError);
+        return { 
+            success: false, 
+            error: profileError.message || "Registro de perfil fallido. Faltan datos obligatorios o hay un error de base de datos." 
+        };
+    }
+    
+    return { success: true, error: null };
 }
 
 // ----------------------------------------------------
@@ -134,7 +131,7 @@ export async function signupAdmin({
 /**
  * Actualiza los datos del perfil de un administrador en la tabla admin_profiles.
  */
-export async function updateAdminProfile( // <-- Función que faltaba (y tiene export)
+export async function updateAdminProfile(
     userId: string, 
     data: Partial<AdminProfile>
 ): Promise<{ success: boolean; error: string | null }> {
@@ -143,12 +140,34 @@ export async function updateAdminProfile( // <-- Función que faltaba (y tiene e
     const updateData = Object.fromEntries(
         Object.entries(data).filter(([_, value]) => value !== undefined)
     );
+
+    // Si se incluye avatar_url, sincronizarlo también en auth metadata de Supabase
+    if (data.avatar_url !== undefined) {
+        await supabase.auth.updateUser({
+            data: { avatar_url: data.avatar_url }
+        }).catch(err => console.warn("No se pudo sincronizar avatar_url con Supabase Auth metadata:", err));
+    }
     
     // 2. Ejecutar la actualización en Supabase
-    const { error } = await supabase
+    let { error } = await supabase
         .from('admin_profiles')
         .update(updateData) 
         .eq('id', userId); 
+
+    // Fallback defensivo si la columna avatar_url aún no ha sido agregada mediante DDL en PostgreSQL
+    if (error && (error.code === '42703' || error.message?.includes('avatar_url')) && 'avatar_url' in updateData) {
+        console.warn("Columna 'avatar_url' aún no está creada en la tabla 'admin_profiles'. Se actualizan los demás campos.");
+        const { avatar_url, ...restUpdateData } = updateData;
+        if (Object.keys(restUpdateData).length > 0) {
+            const fallbackResult = await supabase
+                .from('admin_profiles')
+                .update(restUpdateData)
+                .eq('id', userId);
+            error = fallbackResult.error;
+        } else {
+            error = null;
+        }
+    }
 
     if (error) {
         console.error("Error al actualizar el perfil de administrador:", error);

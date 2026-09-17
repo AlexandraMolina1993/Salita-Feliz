@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/contexts/ThemeContext'; 
 import { Toaster } from '@/components/ui/toaster'; 
+import { Toaster as SonnerToaster } from '@/components/ui/sonner'; 
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <body className={inter.className}>
           {children}
           <Toaster />
+          <SonnerToaster position="top-right" richColors />
         </body>
       </html>
     </ThemeProvider>

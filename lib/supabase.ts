@@ -30,6 +30,7 @@ export interface admin_profiles {
     hireDate: string;
     emergencyContactName: string;
     emergencyContactPhone: string;
+    avatar_url?: string | null;
     created_at: string; 
 }
 

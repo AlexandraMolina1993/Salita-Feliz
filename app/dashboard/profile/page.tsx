@@ -1,14 +1,18 @@
 // app/dashboard/profile/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchAdminProfile, updateAdminProfile } from '@/lib/auth'; 
+import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { AdminProfile } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; 
+import { Camera, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
-type EditableProfileFields = Omit<AdminProfile, 'id' | 'email' | 'role'>;
+type EditableProfileFields = Omit<AdminProfile, 'id' | 'email' | 'role' | 'avatar_url'>;
 
 export default function ProfilePage() {
     const [profile, setProfile] = useState<AdminProfile | null>(null);
@@ -17,6 +21,8 @@ export default function ProfilePage() {
     const [successMessage, setSuccessMessage] = useState('');
     const [formData, setFormData] = useState<Partial<EditableProfileFields>>({}); 
     const [error, setError] = useState('');
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const initializeFormData = (data: AdminProfile) => {
         setFormData({
@@ -54,6 +60,139 @@ export default function ProfilePage() {
     useEffect(() => {
         loadProfile();
     }, []);
+
+    // Función para obtener iniciales del nombre (ej. "Alexandra Molina" -> "AM")
+    const getInitials = (name?: string | null, email?: string | null): string => {
+        if (name && name.trim()) {
+            const parts = name.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+            }
+            return parts[0].slice(0, 2).toUpperCase();
+        }
+        if (email && email.trim()) {
+            return email.trim().slice(0, 2).toUpperCase();
+        }
+        return 'AM';
+    };
+
+    // Extrae la ruta relativa dentro del bucket 'avatars' a partir de una URL pública
+    const extractStoragePath = (publicUrl: string, bucket = 'avatars'): string | null => {
+        if (!publicUrl) return null;
+        try {
+            const bucketMarker = `/storage/v1/object/public/${bucket}/`;
+            if (publicUrl.includes(bucketMarker)) {
+                const parts = publicUrl.split(bucketMarker);
+                return decodeURIComponent(parts[1].split('?')[0]);
+            }
+            const genericMarker = `/${bucket}/`;
+            const lastIndex = publicUrl.lastIndexOf(genericMarker);
+            if (lastIndex !== -1) {
+                const pathPart = publicUrl.substring(lastIndex + genericMarker.length);
+                return decodeURIComponent(pathPart.split('?')[0]);
+            }
+        } catch (err) {
+            console.warn('Error al extraer path de Storage:', err);
+        }
+        return null;
+    };
+
+    // Maneja la subida, reemplazo de foto previa y guardado de URL en BD
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const userId = profile?.id;
+        if (!userId) {
+            toast.error("Error: No se encontró la sesión del usuario.");
+            return;
+        }
+
+        // Validación de tipo de archivo y tamaño máximo (5MB)
+        if (!file.type.startsWith('image/')) {
+            toast.error("Por favor selecciona un archivo de imagen válido (JPG, PNG, WEBP).");
+            return;
+        }
+
+        const maxBytes = 5 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            toast.error("La imagen supera el límite máximo permitido de 5 MB.");
+            return;
+        }
+
+        setIsUploadingAvatar(true);
+
+        try {
+            const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+            const newFileName = `admin-${userId}-${Date.now()}.${fileExt}`;
+            const bucketName = 'avatars';
+
+            // 1. Subir la nueva imagen a Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from(bucketName)
+                .upload(newFileName, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+
+            if (uploadError) {
+                throw new Error(`Error al subir la imagen: ${uploadError.message}`);
+            }
+
+            // 2. Obtener URL pública de la nueva imagen
+            const { data: publicUrlData } = supabase.storage
+                .from(bucketName)
+                .getPublicUrl(newFileName);
+
+            if (!publicUrlData?.publicUrl) {
+                throw new Error("No se pudo obtener la URL pública de la imagen.");
+            }
+
+            const newAvatarUrl = publicUrlData.publicUrl;
+
+            // 3. CRÍTICO: Si el usuario ya tenía una foto previa en el bucket, eliminarla de Supabase Storage
+            const oldAvatarUrl = profile?.avatar_url;
+            if (oldAvatarUrl) {
+                const oldFilePath = extractStoragePath(oldAvatarUrl, bucketName);
+                if (oldFilePath && oldFilePath !== newFileName) {
+                    console.log(`[Storage] Eliminando imagen previa del bucket: ${oldFilePath}`);
+                    const { error: deleteError } = await supabase.storage
+                        .from(bucketName)
+                        .remove([oldFilePath]);
+
+                    if (deleteError) {
+                        console.warn("[Storage] Advertencia al eliminar foto previa:", deleteError.message);
+                    } else {
+                        console.log("[Storage] Foto previa eliminada exitosamente del bucket.");
+                    }
+                }
+            }
+
+            // 4. Actualización en Base de Datos
+            const { success, error: updateError } = await updateAdminProfile(userId, {
+                avatar_url: newAvatarUrl
+            });
+
+            if (!success && updateError) {
+                throw new Error(updateError);
+            }
+
+            // 5. Actualizar el estado local para reflejo inmediato en la UI
+            setProfile(prev => prev ? { ...prev, avatar_url: newAvatarUrl } : null);
+
+            // 6. Notificación Sonner
+            toast.success("Foto actualizada");
+
+        } catch (err: any) {
+            console.error("Error al actualizar la foto de perfil:", err);
+            toast.error(err?.message || "Ocurrió un error al actualizar la foto de perfil.");
+        } finally {
+            setIsUploadingAvatar(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -121,7 +260,92 @@ export default function ProfilePage() {
                 
                 {/* 📦 2. Cambiado bg-white por bg-card y agregado borde semántico */}
                 <div className="bg-card text-card-foreground p-6 rounded-2xl border border-border shadow-sm">
-                    <h2 className="text-xl font-semibold mb-4 text-foreground">Información Básica</h2>
+                    <h2 className="text-xl font-semibold mb-6 text-foreground">Información Básica</h2>
+
+                    {/* 📸 Sección Interactiva de Foto de Perfil */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pb-6 mb-6 border-b border-border">
+                        {/* Avatar Grande con indicador de carga y trigger sobrepuesto */}
+                        <div className="relative group">
+                            <Avatar className="h-24 w-24 border-2 border-border shadow-md ring-4 ring-primary/10">
+                                <AvatarImage 
+                                    src={profile?.avatar_url || ''} 
+                                    alt={profile?.name || 'Foto de perfil'} 
+                                    className="object-cover"
+                                />
+                                <AvatarFallback className="bg-gradient-to-tr from-primary/80 to-primary text-primary-foreground font-bold text-2xl tracking-wider select-none">
+                                    {getInitials(profile?.name, profile?.email)}
+                                </AvatarFallback>
+                            </Avatar>
+
+                            {/* Estado visual de carga sobre el avatar */}
+                            {isUploadingAvatar && (
+                                <div className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center backdrop-blur-[1px] transition-all">
+                                    <Loader2 className="w-8 h-8 text-white animate-spin" />
+                                </div>
+                            )}
+
+                            {/* Botón flotante de cámara sobrepuesto */}
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isUploadingAvatar}
+                                aria-label="Cambiar foto de perfil"
+                                title="Cambiar foto"
+                                className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-card"
+                            >
+                                <Camera className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Controles y texto explicativo */}
+                        <div className="flex flex-col items-center sm:items-start text-center sm:text-left space-y-2 flex-1">
+                            <div>
+                                <h3 className="text-base font-semibold text-foreground">
+                                    {profile?.name || 'Administrador'}
+                                </h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Foto de perfil en el sistema. Formatos: JPG, PNG o WEBP (máx. 5MB).
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-1">
+                                <input 
+                                    ref={fileInputRef}
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={handleAvatarUpload}
+                                    className="hidden" 
+                                    id="profile-avatar-upload"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingAvatar}
+                                    className="rounded-xl border-border/80 hover:bg-accent transition-all font-medium"
+                                >
+                                    {isUploadingAvatar ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Subiendo foto...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Camera className="w-4 h-4 mr-2 text-primary" />
+                                            Cambiar foto
+                                        </>
+                                    )}
+                                </Button>
+                                {profile?.avatar_url && !isUploadingAvatar && (
+                                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                        ✓ Foto configurada
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         
                         {/* Nombre Completo */}

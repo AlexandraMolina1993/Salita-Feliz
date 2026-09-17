@@ -23,7 +23,7 @@ interface NursesDetailsModalProps {
   title: string
   description: string
   nurses: Nurse[]
-  type: 'total' | 'activos' | 'inactivos'
+  type: 'total' | 'activos' | 'inactivos' | 'en_turno_hoy'
 }
 
 export const NursesDetailsModal = ({
@@ -87,17 +87,25 @@ export const NursesDetailsModal = ({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {nurses.map((nurse) => (
-                <TableRow key={nurse.id}>
-                  <TableCell className="font-medium">
-                    {nurse.full_name}
+              {nurses.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    No se encontraron enfermeros para mostrar en este grupo.
                   </TableCell>
-                  <TableCell>{nurse.license_number}</TableCell>
-                  <TableCell>{nurse.phone}</TableCell>
-                  <TableCell>{nurse.email}</TableCell>
-                  <TableCell>{getStatusBadge(nurse.is_active)}</TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                nurses.map((nurse) => (
+                  <TableRow key={nurse.id}>
+                    <TableCell className="font-medium">
+                      {nurse.full_name}
+                    </TableCell>
+                    <TableCell>{nurse.license_number}</TableCell>
+                    <TableCell>{nurse.phone}</TableCell>
+                    <TableCell>{nurse.email}</TableCell>
+                    <TableCell>{getStatusBadge(nurse.is_active)}</TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

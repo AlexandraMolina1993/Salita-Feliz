@@ -1850,24 +1850,88 @@ export async function getPatientStats() {
   };
 }
 
-// --- Renombrada para evitar conflicto
+// --- Estadísticas Generales de Enfermeros con turnos de hoy en UTC-3 (Argentina)
+export async function getNursesOnDutyToday(): Promise<{
+  count: number;
+  nurseIds: string[];
+  nurses: Nurse[];
+}> {
+  const nurses = await getNurses();
+  const today = getArgentinaTodayDateString();
+
+  const { data: todayAppointments, error } = await supabase
+    .from("appointments")
+    .select("nurse_id, status")
+    .eq("appointment_date", today)
+    .is("deleted_at", null)
+    .not("nurse_id", "is", null);
+
+  if (error) {
+    console.error("Error al obtener enfermeros en turno hoy:", error);
+    return { count: 0, nurseIds: [], nurses: [] };
+  }
+
+  const distinctNurseIds = Array.from(
+    new Set(
+      (todayAppointments || [])
+        .filter((a: any) => a.nurse_id && a.status !== "cancelled")
+        .map((a: any) => String(a.nurse_id))
+    )
+  );
+
+  const onDutySet = new Set(distinctNurseIds);
+  const onDutyNurses = nurses.filter((n) => Boolean(n.id && onDutySet.has(n.id)));
+
+  return {
+    count: distinctNurseIds.length,
+    nurseIds: distinctNurseIds,
+    nurses: onDutyNurses,
+  };
+}
+
 export async function getGeneralNurseStats() {
-  const nurses = await getNurses();
+  const nurses = await getNurses();
+  const today = getArgentinaTodayDateString();
 
-  const activeNurses = nurses.filter((n) => n.is_active);
-  const inactiveNurses = nurses.filter((n) => !n.is_active);
-  const specialtyList = [...new Set(nurses.map((n) => n.specialty).filter(Boolean))];
+  // Consultar tabla appointments para contar enfermeros distintos con turno hoy (UTC-3)
+  const { data: todayAppointments, error } = await supabase
+    .from("appointments")
+    .select("nurse_id, status")
+    .eq("appointment_date", today)
+    .is("deleted_at", null)
+    .not("nurse_id", "is", null);
 
-  return {
-    total: nurses.length,
-    active: activeNurses.length,
-    inactive: inactiveNurses.length,
-    specialties: specialtyList.length,
-    activeNurses,
-    inactiveNurses,
-    allNurses: nurses,
-    specialtyList,
-  };
+  if (error) {
+    console.error("Error al obtener turnos de hoy para estadísticas de enfermeros:", error);
+  }
+
+  const distinctNurseIds = Array.from(
+    new Set(
+      (todayAppointments || [])
+        .filter((a: any) => a.nurse_id && a.status !== "cancelled")
+        .map((a: any) => String(a.nurse_id))
+    )
+  );
+
+  const activeNurses = nurses.filter((n) => n.is_active);
+  const inactiveNurses = nurses.filter((n) => !n.is_active);
+  const onDutySet = new Set(distinctNurseIds);
+  const onDutyNurses = nurses.filter((n) => Boolean(n.id && onDutySet.has(n.id)));
+  const specialtyList = [...new Set(nurses.map((n) => n.specialty).filter(Boolean))];
+
+  return {
+    total: nurses.length,
+    active: activeNurses.length,
+    inactive: inactiveNurses.length,
+    onDutyToday: distinctNurseIds.length,
+    onDutyNurseIds: distinctNurseIds,
+    onDutyNurses,
+    specialties: specialtyList.length,
+    activeNurses,
+    inactiveNurses,
+    allNurses: nurses,
+    specialtyList,
+  };
 }
 
 export async function getAppointmentStats() {

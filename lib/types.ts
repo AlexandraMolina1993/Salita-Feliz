@@ -16,3 +16,20 @@ export interface appointments {
 // export interface Patient { ... }
 // export interface Nurse { ... }
 // export interface Vaccine { ... }
+
+export interface AdminProfile {
+  id: string;
+  email: string;
+  role: string;
+  name: string;
+  idNumber: string;
+  phone: string;
+  address: string;
+  birthDate: string;
+  gender: string;
+  hireDate: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  avatar_url?: string | null;
+  created_at?: string;
+}

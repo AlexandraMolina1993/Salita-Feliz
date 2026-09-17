@@ -14,22 +14,36 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "@/contexts/ThemeContext" // 🎯 Importamos tu contexto global
 import { NotificationBell } from "@/components/notification-bell"
 import { LogOut, Moon, Sun } from "lucide-react"
-import { logout, getCurrentUser } from "@/lib/auth"
+import { logout, getCurrentUser, fetchAdminProfile } from "@/lib/auth"
 
 export function Header() {
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string>('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   
   // 🎯 Consumimos el estado del tema global
   const { isDarkMode, setDarkMode } = useTheme()
 
   useEffect(() => {
     let isMounted = true
-    getCurrentUser().then((u) => {
-      if (isMounted && u?.email) {
-        setUserEmail(u.email)
+    fetchAdminProfile().then((p) => {
+      if (isMounted && p) {
+        if (p.email) setUserEmail(p.email)
+        if (p.avatar_url) setAvatarUrl(p.avatar_url)
+      } else {
+        getCurrentUser().then((u) => {
+          if (isMounted && u?.email) {
+            setUserEmail(u.email)
+          }
+        }).catch(() => {})
       }
-    }).catch(() => {})
+    }).catch(() => {
+      getCurrentUser().then((u) => {
+        if (isMounted && u?.email) {
+          setUserEmail(u.email)
+        }
+      }).catch(() => {})
+    })
     return () => {
       isMounted = false
     }
@@ -59,8 +73,8 @@ export function Header() {
             variant="ghost"
             size="icon"
             onClick={() => setDarkMode(!isDarkMode)}
-            className="text-muted-foreground hover:text-foreground rounded-xl"
-            title={isDarkMode ? "Activar Modo Claro" : "Activar Modo Oscuro"}
+            aria-label="Toggle dark mode"
+            className="hover:bg-accent rounded-xl text-muted-foreground hover:text-foreground"
           >
             {isDarkMode ? (
               <Sun className="h-5 w-5 text-amber-500 animate-fade-in" />
@@ -72,10 +86,10 @@ export function Header() {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src="/placeholder.svg?height=40&width=40" alt="Avatar" />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
+                <Avatar className="h-10 w-10 border border-border/50 shadow-sm">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" className="object-cover" />}
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
                     {userEmail?.charAt(0).toUpperCase() || "A"}
                   </AvatarFallback>
                 </Avatar>

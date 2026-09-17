@@ -7,21 +7,35 @@ import { LogOut, User, Settings } from 'lucide-react'
 // Importaciones de tus componentes de UI
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useState, useEffect } from 'react'
-import { logout, getCurrentUser } from '@/lib/auth'
+import { logout, getCurrentUser, fetchAdminProfile } from '@/lib/auth'
 
 export function UserNav() {
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string>('admin@salitafeliz.com')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let isMounted = true
-    getCurrentUser().then((u) => {
-      if (isMounted && u?.email) {
-        setUserEmail(u.email)
+    fetchAdminProfile().then((p) => {
+      if (isMounted && p) {
+        if (p.email) setUserEmail(p.email)
+        if (p.avatar_url) setAvatarUrl(p.avatar_url)
+      } else {
+        getCurrentUser().then((u) => {
+          if (isMounted && u?.email) {
+            setUserEmail(u.email)
+          }
+        }).catch(() => {})
       }
-    }).catch(() => {})
+    }).catch(() => {
+      getCurrentUser().then((u) => {
+        if (isMounted && u?.email) {
+          setUserEmail(u.email)
+        }
+      }).catch(() => {})
+    })
     return () => {
       isMounted = false
     }
@@ -46,7 +60,8 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         {/* El círculo que activa el menú */}
         <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
-            <Avatar className="h-8 w-8 bg-primary/10">
+            <Avatar className="h-8 w-8 bg-primary/10 border border-border/50">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" className="object-cover" />}
                 <AvatarFallback className="text-primary text-sm font-semibold">
                     {userInitial}
                 </AvatarFallback>

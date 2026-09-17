@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, Edit, Trash2, Eye, UserCheck, Award, Calendar } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, UserCheck, Award, Calendar, CalendarClock } from 'lucide-react'
 import Link from 'next/link'
-import { getNurses, deleteNurse } from '@/lib/database'
+import { getNurses, deleteNurse, getGeneralNurseStats } from '@/lib/database'
 import { type Nurse } from '@/lib/supabase'
 import { NursesDetailsModal } from '@/components/nurses-details-modal'
 
 export default function EnfermerosPage() {
   const [nurses, setNurses] = useState<Nurse[]>([])
+  const [onDutyCount, setOnDutyCount] = useState<number>(0)
+  const [onDutyNurses, setOnDutyNurses] = useState<Nurse[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -22,7 +24,7 @@ export default function EnfermerosPage() {
     title: string
     description: string
     nurses: Nurse[]
-    type: 'total' | 'activos' | 'inactivos'
+    type: 'total' | 'activos' | 'inactivos' | 'en_turno_hoy'
   }>({
     isOpen: false,
     title: '',
@@ -37,10 +39,18 @@ export default function EnfermerosPage() {
 
   const loadNurses = async () => {
     try {
-      const data = await getNurses()
-      setNurses(data)
+      const stats = await getGeneralNurseStats()
+      setNurses(stats.allNurses)
+      setOnDutyCount(stats.onDutyToday)
+      setOnDutyNurses(stats.onDutyNurses)
     } catch (error) {
       console.error('Error loading nurses:', error)
+      try {
+        const fallback = await getNurses()
+        setNurses(fallback)
+      } catch (err) {
+        console.error('Fallback error loading nurses:', err)
+      }
     } finally {
       setLoading(false)
     }
@@ -131,6 +141,15 @@ export default function EnfermerosPage() {
     openModal("Enfermeros Inactivos", `Mostrando ${inactiveNurses.length} enfermeros con estado 'inactivo'`, inactiveNurses, "inactivos")
   }
 
+  const openOnDutyNursesModal = () => {
+    openModal(
+      "Enfermeros en Turno Hoy",
+      `Mostrando ${onDutyNurses.length} enfermero(s) con al menos un turno programado para hoy`,
+      onDutyNurses,
+      "en_turno_hoy"
+    )
+  }
+
 const openSpecialtiesModal = () => {
     // Correctly filters nurses with a specialty
     const nursesWithSpecialty = nurses.filter(n => n.specialty !== null)
@@ -185,7 +204,7 @@ const openSpecialtiesModal = () => {
       </Card>
 
       {/* Stats Cards - Clickeables */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card
           className="modern-card gradient-primary text-white clickable-card"
           onClick={openTotalNursesModal}
@@ -193,7 +212,7 @@ const openSpecialtiesModal = () => {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100">Total Enfermeros</p>
+                <p className="text-blue-100 font-medium">Total Enfermeros</p>
                 <p className="text-3xl font-bold">{nurses.length}</p>
               </div>
               <UserCheck className="h-12 w-12 text-blue-200" />
@@ -208,7 +227,7 @@ const openSpecialtiesModal = () => {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-100">Activos</p>
+                <p className="text-green-100 font-medium">Activos</p>
                 <p className="text-3xl font-bold">
                   {activeNurses.length}
                 </p>
@@ -225,12 +244,27 @@ const openSpecialtiesModal = () => {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-yellow-100">Inactivos</p>
+                <p className="text-yellow-100 font-medium">Inactivos</p>
                 <p className="text-3xl font-bold">
                   {inactiveNurses.length}
                 </p>
               </div>
               <Award className="h-12 w-12 text-yellow-200" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="modern-card bg-gradient-to-r from-amber-400 to-orange-500 text-white clickable-card"
+          onClick={openOnDutyNursesModal}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-amber-100 font-medium">En Turno Hoy</p>
+                <p className="text-3xl font-bold">{onDutyCount}</p>
+              </div>
+              <CalendarClock className="h-12 w-12 text-amber-200" />
             </div>
           </CardContent>
         </Card>
