@@ -183,7 +183,7 @@ export default function VacunasPage() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold gradient-text">💉 Vacunas</h1>
-            <p className="text-muted-foreground mt-2">Cargando inventario consolidado de la vista v_vaccines_stock...</p>
+            <p className="text-muted-foreground mt-2">Cargando Inventario</p>
           </div>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -214,7 +214,7 @@ export default function VacunasPage() {
           <div className="flex items-center gap-2 mb-1">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
-              Ledger v_vaccines_stock Activo
+              Stock Activo
             </span>
           </div>
           <h1 className="text-4xl font-bold gradient-text flex items-center gap-3">

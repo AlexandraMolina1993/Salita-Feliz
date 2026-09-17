@@ -29,26 +29,26 @@ import {
 } from "lucide-react";
 import {
     getVaccineStatsById,
-    getReplenishmentSchedulesByVaccineId, 
+    getReplenishmentSchedulesByVaccineId,
     getVaccineUnifiedHistory
 } from "@/lib/database";
 import type {
     UnifiedHistoryItem,
-    ReplenishmentSchedule, 
+    ReplenishmentSchedule,
     IncidentType,
 } from "@/lib/database";
-import { 
-    getVaccineStockByIdAction, 
+import {
+    getVaccineStockByIdAction,
     addVaccineStockAction,
     scheduleReplenishmentAction,
     reportVaccineIncidentAction,
     deleteReplenishmentScheduleAction,
     deleteVaccineIncidentAction,
-    type ExtendedVaccineItem 
+    type ExtendedVaccineItem
 } from "@/app/actions/vaccines";
 
-import { AddStockDialog } from "@/components/add-stock-dialog"; 
-import { ScheduleReplenishmentDialog } from "@/components/schedule-replenishment-dialog"; 
+import { AddStockDialog } from "@/components/add-stock-dialog";
+import { ScheduleReplenishmentDialog } from "@/components/schedule-replenishment-dialog";
 import { ReportIncidentDialog, type IncidentFormData } from "@/components/report-incident-dialog";
 import { AIStockAutonomyCard } from "@/components/ai-stock-autonomy-card";
 
@@ -72,10 +72,10 @@ export default function VaccineDetailPage() {
     const [usageStats, setUsageStats] = useState<VaccineStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState<string | null>(null);
-    
+
     const [isStockDialogOpen, setIsStockDialogOpen] = useState(false);
     const [isSubmittingStock, setIsSubmittingStock] = useState(false);
-    
+
     const [schedules, setSchedules] = useState<ReplenishmentSchedule[]>([]);
     const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
     const [isSubmittingSchedule, setIsSubmittingSchedule] = useState(false);
@@ -102,7 +102,7 @@ export default function VaccineDetailPage() {
             }
 
             setHistory(prev => prev.filter(item => item.id !== itemId));
-            
+
             if (type === 'replenishment') {
                 setSchedules(prev => prev.filter(s => s.id !== itemId));
             }
@@ -111,7 +111,7 @@ export default function VaccineDetailPage() {
                 title: "Registro eliminado",
                 description: "El evento fue removido del historial de trazabilidad correctamente.",
             });
-            
+
             if (params.id) await loadVaccineData(params.id as string);
 
         } catch (error) {
@@ -171,7 +171,7 @@ export default function VaccineDetailPage() {
                         colorClass: 'border-emerald-400 bg-emerald-50/70',
                         badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
                         icon: '📦',
-                        title: 'Ingreso de Stock (IN)',
+                        title: 'Ingreso de Stock',
                         qtyLabel: 'Viales Ingresados'
                     };
             }
@@ -205,7 +205,7 @@ export default function VaccineDetailPage() {
 
                     <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 shrink-0">
                         <p suppressHydrationWarning className="text-xs text-slate-500 font-medium hidden sm:block">{dateDisplay}</p>
-                        
+
                         {isDeletable && (
                             <Button
                                 variant="ghost"
@@ -227,7 +227,7 @@ export default function VaccineDetailPage() {
             </Card>
         );
     };
-    
+
     const loadVaccineData = useCallback(async (id: string, isInitial = false) => {
         if (!id) {
             setLoading(false);
@@ -279,14 +279,14 @@ export default function VaccineDetailPage() {
     }, [vaccineParamId, loadVaccineData]);
 
     // 1. ACCIÓN RÁPIDA: AÑADIR STOCK (VIALES)
-    const handleStockAdd = async ({ 
-        quantity, 
-        lot_number, 
+    const handleStockAdd = async ({
+        quantity,
+        lot_number,
         expiration_date,
         notes
-    }: { 
-        quantity: number; 
-        lot_number?: string; 
+    }: {
+        quantity: number;
+        lot_number?: string;
         expiration_date?: Date | string | null;
         notes?: string | null;
     }) => {
@@ -310,14 +310,14 @@ export default function VaccineDetailPage() {
 
             toast({
                 title: "Stock Añadido Exitosamente",
-                description: `Se han añadido ${quantity} viales a ${vaccine.name} y registrado en el Ledger de stock.`,
+                description: `Se han añadido ${quantity} viales a ${vaccine.name}.`,
             });
-            setIsStockDialogOpen(false); 
+            setIsStockDialogOpen(false);
         } catch (error) {
             console.error("Error al agregar stock:", error);
             toast({
                 title: "Error al agregar stock",
-                description: error instanceof Error ? error.message : "Hubo un error al registrar el movimiento en stock_movements.",
+                description: error instanceof Error ? error.message : "Hubo un error al registrar el movimiento.",
                 variant: "destructive",
             });
         } finally {
@@ -326,13 +326,13 @@ export default function VaccineDetailPage() {
     };
 
     // 2. ACCIÓN RÁPIDA: PROGRAMAR REPOSICIÓN
-    const handleScheduleReplenishment = async ({ 
-        scheduled_date, 
-        quantity_to_order, 
-        notes 
-    }: { 
-        scheduled_date: string; 
-        quantity_to_order: number; 
+    const handleScheduleReplenishment = async ({
+        scheduled_date,
+        quantity_to_order,
+        notes
+    }: {
+        scheduled_date: string;
+        quantity_to_order: number;
         notes?: string | null;
     }) => {
         if (!vaccine?.id) return;
@@ -345,7 +345,7 @@ export default function VaccineDetailPage() {
                 quantityToOrder: quantity_to_order,
                 notes: notes,
             });
-            
+
             await loadVaccineData(vId);
 
             toast({
@@ -357,7 +357,7 @@ export default function VaccineDetailPage() {
             console.error("Error al programar reposición:", error);
             toast({
                 title: "Error al programar reposición",
-                description: error instanceof Error ? error.message : "Hubo un error al guardar en replenishment_schedules.",
+                description: error instanceof Error ? error.message : "Hubo un error al guardar.",
                 variant: "destructive",
             });
         } finally {
@@ -388,14 +388,14 @@ export default function VaccineDetailPage() {
 
             toast({
                 title: "Incidente Registrado Formalmente",
-                description: `El incidente de tipo '${data.type}' ha sido guardado en incident_reports${data.deduct_from_stock && data.quantity_affected ? ' y descontado del inventario' : ''}.`,
+                description: `El incidente de tipo '${data.type}' ha sido guardado${data.deduct_from_stock && data.quantity_affected ? ' y descontado del inventario' : ''}.`,
             });
             setIsIncidentDialogOpen(false);
         } catch (error) {
             console.error("Error al reportar incidente:", error);
             toast({
                 title: "Error al registrar incidente",
-                description: error instanceof Error ? error.message : "Hubo un error al registrar en incident_reports.",
+                description: error instanceof Error ? error.message : "Hubo un error al registrar.",
                 variant: "destructive",
             });
         } finally {
@@ -414,7 +414,7 @@ export default function VaccineDetailPage() {
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="text-center space-y-3">
                     <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto" />
-                    <p className="text-slate-500 font-medium animate-pulse">Cargando datos y ledger de stock...</p>
+                    <p className="text-slate-500 font-medium animate-pulse">Cargando datos...</p>
                 </div>
             </div>
         );
@@ -459,13 +459,6 @@ export default function VaccineDetailPage() {
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-3xl font-black text-slate-800 tracking-tight">{vaccine.name}</h1>
-                            <Badge className="bg-blue-50 text-blue-700 border border-blue-200 text-xs">
-                                Vista en tiempo real: v_vaccines_stock
-                            </Badge>
-                        </div>
-                        <p className="text-muted-foreground text-sm mt-0.5">Control dinámico de inventario clínico y trazabilidad por viales</p>
                     </div>
                 </div>
                 <Button asChild className="modern-button shadow-md">
@@ -601,9 +594,7 @@ export default function VaccineDetailPage() {
                                     <ShieldCheck className="h-5 w-5 text-emerald-600" />
                                     Balance Dinámico de Stock
                                 </span>
-                                <Badge variant="outline" className="text-[10px] font-mono">
-                                    v_vaccines_stock
-                                </Badge>
+
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-5 pt-4">
@@ -616,7 +607,7 @@ export default function VaccineDetailPage() {
                                     Total en mililitros: <span className="text-indigo-600 font-bold">{dynamicMl.toFixed(1)} ml</span> ({doseAmount} ml/dosis)
                                 </p>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3 text-center">
                                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
                                     <p className="text-lg font-black text-slate-800">{minStock}</p>
@@ -697,7 +688,7 @@ export default function VaccineDetailPage() {
                     onRefresh={() => loadVaccineData(vaccine.id, false)}
                 />
             </div>
-            
+
             {/* HISTORIAL UNIFICADO */}
             <div className="mt-8 space-y-4">
                 <h2 className="text-2xl font-black tracking-tight text-slate-800 flex items-center">
@@ -716,7 +707,7 @@ export default function VaccineDetailPage() {
                     )}
                 </div>
             </div>
-            
+
             {/* Diálogos modales */}
             <AddStockDialog open={isStockDialogOpen} onOpenChange={setIsStockDialogOpen} vaccine={vaccine} onStockAdded={() => loadVaccineData(vaccine.id, false)} isSubmitting={isSubmittingStock} onSubmit={handleStockAdd} />
             <ScheduleReplenishmentDialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen} vaccine={vaccine} isSubmitting={isSubmittingSchedule} onSubmit={handleScheduleReplenishment} />

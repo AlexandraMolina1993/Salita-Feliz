@@ -76,6 +76,7 @@
     "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cypress": "^16.0.0",
     "pg": "^8.23.0",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",

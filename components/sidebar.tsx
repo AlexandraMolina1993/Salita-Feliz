@@ -22,9 +22,9 @@ import {
 
 const navigation = [
   { name: "Panel de Control", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Perfil", href: "/dashboard/profile", icon: Users },
+  { name: "Perfil", href: "/dashboard/profile", icon: UserCheck },
   { name: "Pacientes", href: "/dashboard/pacientes", icon: Users },
-  { name: "Enfermeros", href: "/dashboard/enfermeros", icon: UserCheck },
+  { name: "Enfermeros", href: "/dashboard/enfermeros", icon: Users },
   { name: "Vacunas", href: "/dashboard/vacunas", icon: Syringe },
   { name: "Turnos", href: "/dashboard/turnos", icon: Calendar },
   { name: "Reportes", href: "/dashboard/reportes", icon: BarChart3 },
@@ -59,10 +59,10 @@ export function Sidebar() {
               </div>
             </div>
           )}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setCollapsed(!collapsed)} 
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCollapsed(!collapsed)}
             className="p-1.5 text-gray-500 dark:text-slate-400 dark:hover:bg-slate-900"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -84,11 +84,11 @@ export function Sidebar() {
                     : "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-900 hover:text-gray-900 dark:hover:text-white",
                 )}
               >
-                <item.icon 
+                <item.icon
                   className={cn(
-                    "h-5 w-5 flex-shrink-0", 
+                    "h-5 w-5 flex-shrink-0",
                     isActive ? "text-white" : "text-gray-500 dark:text-slate-400"
-                  )} 
+                  )}
                 />
                 {!collapsed && <span className="font-medium">{item.name}</span>}
               </div>

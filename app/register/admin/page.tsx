@@ -19,7 +19,7 @@ export default function AdminRegisterPage() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [phone, setPhone] = useState('')
-    
+
     // 2. 🚨 ESTADOS ADICIONALES REQUERIDOS POR EL ESQUEMA DE LA BASE DE DATOS
     const [idNumber, setIdNumber] = useState('')
     const [address, setAddress] = useState('')
@@ -37,8 +37,8 @@ export default function AdminRegisterPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (password.length < 6) {
-            setError("La contraseña debe tener al menos 6 caracteres.");
+        if (password.length < 8) {
+            setError("La contraseña debe tener al menos 8 caracteres.");
             return;
         }
         if (!gender) {
@@ -52,18 +52,18 @@ export default function AdminRegisterPage() {
 
         try {
             // 🚨 ENVIAR TODOS LOS CAMPOS AL BACKEND
-            const { success, error } = await signupAdmin({ 
-                name, 
-                email, 
-                password, 
-                phone, 
-                idNumber, 
-                address, 
-                birthDate, 
-                gender, 
-                hireDate, 
-                emergencyContactName, 
-                emergencyContactPhone 
+            const { success, error } = await signupAdmin({
+                name,
+                email,
+                password,
+                phone,
+                idNumber,
+                address,
+                birthDate,
+                gender,
+                hireDate,
+                emergencyContactName,
+                emergencyContactPhone
             });
 
             if (success) {
@@ -115,7 +115,7 @@ export default function AdminRegisterPage() {
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
-                        
+
                         {/* ------------------------------------------- */}
                         <h3 className="text-lg font-semibold border-b pb-2">1. Datos de Acceso</h3>
                         {/* ------------------------------------------- */}
@@ -142,7 +142,7 @@ export default function AdminRegisterPage() {
                                 <Label htmlFor="name">Nombre Completo</Label>
                                 <Input id="name" type="text" placeholder="Juan Pérez" value={name} onChange={(e) => setName(e.target.value)} required disabled={isLoading} />
                             </div>
-                            
+
                             {/* Campo N° de Identificación */}
                             <div className="space-y-2">
                                 <Label htmlFor="idNumber">N° de Identificación (DNI/Cédula)</Label>
@@ -154,7 +154,7 @@ export default function AdminRegisterPage() {
                                 <Label htmlFor="phone">Teléfono</Label>
                                 <Input id="phone" type="tel" placeholder="+54 9 11 XXXX-XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} required disabled={isLoading} />
                             </div>
-                            
+
                             {/* Campo Fecha de Nacimiento */}
                             <div className="space-y-2">
                                 <Label htmlFor="birthDate">Fecha de Nacimiento</Label>
@@ -182,7 +182,7 @@ export default function AdminRegisterPage() {
                                 <Input id="address" type="text" placeholder="Calle Falsa 123" value={address} onChange={(e) => setAddress(e.target.value)} required disabled={isLoading} />
                             </div>
                         </div>
-                        
+
                         {/* ------------------------------------------- */}
                         <h3 className="text-lg font-semibold border-b pb-2">3. Datos Laborales y de Emergencia</h3>
                         {/* ------------------------------------------- */}
@@ -192,7 +192,7 @@ export default function AdminRegisterPage() {
                                 <Label htmlFor="hireDate">Fecha de Ingreso</Label>
                                 <Input id="hireDate" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} required disabled={isLoading} />
                             </div>
-                            
+
                             {/* Campo Contacto de Emergencia (Nombre) */}
                             <div className="space-y-2">
                                 <Label htmlFor="emergencyContactName">Contacto de Emergencia (Nombre)</Label>
@@ -205,7 +205,7 @@ export default function AdminRegisterPage() {
                                 <Input id="emergencyContactPhone" type="tel" placeholder="Teléfono del Contacto" value={emergencyContactPhone} onChange={(e) => setEmergencyContactPhone(e.target.value)} required disabled={isLoading} />
                             </div>
                         </div>
-                        
+
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-3">
                         <Button type="submit" className="w-full modern-button" disabled={isLoading}>

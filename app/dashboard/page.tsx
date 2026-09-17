@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [appointmentStats, setAppointmentStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  
+
   // 👤 Estado para guardar el nombre real del Administrador logueado
   const [adminName, setAdminName] = useState<string>('Administrador')
 
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      
+
       // Carga en paralelo de métricas con la vista v_vaccines_stock en tiempo real y ritmo de vacunación
       const [stats, vStockList, pStats, nStats, aStats, rhythmStats, adminProfile] = await Promise.all([
         getDashboardStats().catch(() => null),
@@ -60,7 +60,7 @@ export default function DashboardPage() {
         getVaccinationRhythmAction(30).catch(() => null),
         fetchAdminProfile().catch(() => null)
       ])
-      
+
       setDashboardStats(stats)
       setVaccineStockList((vStockList as any[]) || [])
       setVaccinationRhythm(rhythmStats)
@@ -151,12 +151,12 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/60 p-6 lg:p-8 space-y-8 animate-slide-in-up">
-      
+
       {/* ENCABEZADO PRINCIPAL */}
       <div className="mb-6 space-y-2 border-b border-slate-200 pb-5">
         <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 bg-indigo-50/60 border border-indigo-100/50 w-fit px-3 py-1 rounded-full">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-          ¡Hola de nuevo, {adminName}! Bienvenido al centro de control
+          ¡Hola de nuevo, {adminName}!. Bienvenido a Salita Feliz
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -167,13 +167,13 @@ export default function DashboardPage() {
               </span>
             </h1>
             <p className="text-xs md:text-sm text-slate-400 font-medium">
-              Monitoreo en tiempo real de pacientes, inventario clínico (v_vaccines_stock) y motor de IA predictiva.
+              Monitoreo en tiempo real y motor de IA predictiva.
             </p>
           </div>
 
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full text-[11px] font-bold text-emerald-600 w-fit shadow-sm self-start md:self-auto">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Ledger & Vista v_vaccines_stock Activos
+            Activos
           </div>
         </div>
       </div>
@@ -183,31 +183,31 @@ export default function DashboardPage() {
 
           {/* 1️⃣ FILA SUPERIOR: RESUMEN DE MÉTRICAS CLAVE */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <MiniCard 
-              title="Pacientes Registrados" 
-              value={patientStats.total} 
-              icon={<User className="text-indigo-600" />} 
+            <MiniCard
+              title="Pacientes Registrados"
+              value={patientStats.total}
+              icon={<User className="text-indigo-600" />}
               subtitle={`${patientStats.active} activos con cobertura`}
               onClick={() => openModal("Total Pacientes", patientStats.allPatients, 'patients')}
             />
-            <MiniCard 
-              title="Personal de Enfermería" 
-              value={nurseStats.total} 
-              icon={<Stethoscope className="text-sky-600" />} 
+            <MiniCard
+              title="Personal de Enfermería"
+              value={nurseStats.total}
+              icon={<Stethoscope className="text-sky-600" />}
               subtitle={`${nurseStats.active} enfermeros operativos`}
               onClick={() => openModal("Total Enfermeros", nurseStats.allNurses, 'nurses')}
             />
-            <MiniCard 
-              title="Turnos Concluidos" 
-              value={appointmentStats.completed} 
-              icon={<CheckCircle className="text-emerald-600" />} 
+            <MiniCard
+              title="Turnos Concluidos"
+              value={appointmentStats.completed}
+              icon={<CheckCircle className="text-emerald-600" />}
               subtitle={`${pctCompletados}% efectividad clínica`}
               onClick={() => openModal("Turnos Completados", appointmentStats.completedAppointments, 'appointments')}
             />
-            <MiniCard 
-              title="Ritmo de Vacunación (Últimos 30 días)" 
-              value={`${vaccinationRhythm?.totalDoses ?? 0} dosis`} 
-              icon={<Activity className="text-indigo-600" />} 
+            <MiniCard
+              title="Ritmo de Vacunación (Últimos 30 días)"
+              value={`${vaccinationRhythm?.totalDoses ?? 0} dosis`}
+              icon={<Activity className="text-indigo-600" />}
               subtitle={`Más solicitada: ${vaccinationRhythm?.topVaccineName || "Sin aplicaciones"}`}
               badge={(vaccinationRhythm?.totalDoses ?? 0) > 0 ? "Activo" : undefined}
               onClick={() => openModal("Turnos Completados (Últimos 30 días)", vaccinationRhythm?.completedAppointments || appointmentStats?.completedAppointments || [], 'appointments')}
@@ -221,7 +221,7 @@ export default function DashboardPage() {
 
           {/* 3️⃣ FILA CENTRAL: GRÁFICOS ANALÍTICOS Y GESTIÓN DE STOCK */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
+
             {/* Rendimiento de Turnos */}
             <UICard className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm space-y-6">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -253,13 +253,11 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                     <PieChart className="h-5 w-5 text-sky-500" />
-                    Balance de Stock Clínico (v_vaccines_stock)
+                    Balance de Stock Clínico
                   </h3>
                   <p className="text-xs text-slate-400">Total: {totalViales} viales disponibles ({totalMl.toFixed(1)} ml)</p>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-mono text-indigo-600 bg-indigo-50 border-indigo-100">
-                  En Tiempo Real
-                </Badge>
+
               </div>
 
               <div className="space-y-2">
@@ -276,31 +274,31 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-2">
-                <StockLegendItem 
-                  dotColor="bg-emerald-500" 
-                  label="Stock Óptimo" 
-                  value={`${vacunasOptimas.length} vacunas (${vacunasOptimas.reduce((a, b) => a + b.current_stock_vials, 0)} viales)`} 
-                  onClick={() => openModal("Vacunas con Stock Óptimo", vacunasOptimas, 'vaccines')} 
+                <StockLegendItem
+                  dotColor="bg-emerald-500"
+                  label="Stock Óptimo"
+                  value={`${vacunasOptimas.length} vacunas (${vacunasOptimas.reduce((a, b) => a + b.current_stock_vials, 0)} viales)`}
+                  onClick={() => openModal("Vacunas con Stock Óptimo", vacunasOptimas, 'vaccines')}
                 />
-                <StockLegendItem 
-                  dotColor="bg-amber-400" 
-                  label="Stock Bajo Mínimo" 
-                  value={`${vacunasBajoStock.length} vacunas`} 
+                <StockLegendItem
+                  dotColor="bg-amber-400"
+                  label="Stock Bajo Mínimo"
+                  value={`${vacunasBajoStock.length} vacunas`}
                   textColor="text-amber-700 font-bold"
-                  onClick={() => openModal("Vacunas con Stock Bajo", vacunasBajoStock, 'vaccines')} 
+                  onClick={() => openModal("Vacunas con Stock Bajo", vacunasBajoStock, 'vaccines')}
                 />
-                <StockLegendItem 
-                  dotColor="bg-rose-500" 
-                  label="Sin Stock (Agotadas)" 
-                  value={`${vacunasAgotadas.length} vacunas`} 
+                <StockLegendItem
+                  dotColor="bg-rose-500"
+                  label="Sin Stock (Agotadas)"
+                  value={`${vacunasAgotadas.length} vacunas`}
                   textColor="text-rose-700 font-bold"
-                  onClick={() => openModal("Vacunas Agotadas", vacunasAgotadas, 'vaccines')} 
+                  onClick={() => openModal("Vacunas Agotadas", vacunasAgotadas, 'vaccines')}
                 />
-                <StockLegendItem 
-                  dotColor="bg-purple-400" 
-                  label="Próximas a Vencer" 
-                  value={`${vacunasPorVencer.length} lotes`} 
-                  onClick={() => openModal("Vacunas Por Vencer", vacunasPorVencer, 'vaccines')} 
+                <StockLegendItem
+                  dotColor="bg-purple-400"
+                  label="Próximas a Vencer"
+                  value={`${vacunasPorVencer.length} lotes`}
+                  onClick={() => openModal("Vacunas Por Vencer", vacunasPorVencer, 'vaccines')}
                 />
               </div>
             </UICard>
@@ -309,7 +307,7 @@ export default function DashboardPage() {
 
           {/* 4️⃣ FILA INFERIOR: MONITOREO OPERATIVO EN TIEMPO REAL */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+
             {/* Actividad Reciente */}
             <UICard className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm lg:col-span-2 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -341,11 +339,10 @@ export default function DashboardPage() {
                           {paciente.full_name || paciente.nombre || "Paciente Registrado"}
                         </td>
                         <td className="py-3 px-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            paciente.status === 'ACTIVE' || paciente.status === 'activo' || paciente.estado === 'activo' || !paciente.status
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${paciente.status === 'ACTIVE' || paciente.status === 'activo' || paciente.estado === 'activo' || !paciente.status
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                               : 'bg-slate-100 text-slate-500'
-                          }`}>
+                            }`}>
                             <span className={`w-1 h-1 rounded-full ${paciente.status === 'ACTIVE' || paciente.status === 'activo' || !paciente.status ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                             Alta de Cobertura
                           </span>
@@ -370,7 +367,7 @@ export default function DashboardPage() {
                   </h3>
                   <p className="text-xs text-slate-400">Cronograma inmediato de vacunación</p>
                 </div>
-                <button 
+                <button
                   onClick={() => openModal("Turnos Programados", appointmentStats.scheduledAppointments, 'appointments')}
                   className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
                 >
@@ -391,7 +388,7 @@ export default function DashboardPage() {
                             {nombrePaciente}
                           </p>
                           <p className="text-[10px] text-slate-500 flex items-center gap-1 font-medium">
-                            <span className="text-slate-400 font-semibold">Enf:</span> 
+                            <span className="text-slate-400 font-semibold">Enf:</span>
                             <span className="text-slate-600">{nombreEnfermero}</span>
                           </p>
                         </div>
@@ -441,7 +438,7 @@ interface MiniCardProps {
 
 function MiniCard({ title, value, icon, subtitle, badge, onClick }: MiniCardProps) {
   return (
-    <UICard 
+    <UICard
       onClick={onClick}
       className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 cursor-pointer flex flex-col justify-between group"
     >
@@ -498,7 +495,7 @@ interface StockLegendItemProps {
 
 function StockLegendItem({ dotColor, label, value, textColor = "text-slate-700", onClick }: StockLegendItemProps) {
   return (
-    <div 
+    <div
       onClick={onClick}
       className="p-2.5 border border-slate-100 hover:border-slate-200 hover:bg-slate-50/50 rounded-lg flex items-center justify-between text-xs cursor-pointer transition-all"
     >

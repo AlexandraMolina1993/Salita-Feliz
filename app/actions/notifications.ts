@@ -23,9 +23,9 @@ export async function getSystemNotificationsAction(
   limit = 30
 ): Promise<ActionResponse<SystemNotification[]>> {
   try {
-    // 1. Intentar consultar system_notifications si existe
+    // 1. Intentar consultar notifications si existe
     const { data: sysData, error: sysError } = await supabase
-      .from('system_notifications')
+      .from('notifications')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -97,7 +97,7 @@ export async function markNotificationAsReadAction(
     }
 
     const { error } = await supabase
-      .from('system_notifications')
+      .from('notifications')
       .update({ is_read: true })
       .eq('id', notificationId);
 
@@ -133,7 +133,7 @@ export async function markNotificationAsReadAction(
 export async function markAllNotificationsAsReadAction(): Promise<ActionResponse<{ count: number }>> {
   try {
     const { data, error } = await supabase
-      .from('system_notifications')
+      .from('notifications')
       .update({ is_read: true })
       .eq('is_read', false)
       .select('id');
@@ -172,7 +172,7 @@ export async function createSystemNotificationAction(
 ): Promise<ActionResponse<SystemNotification>> {
   try {
     const { data, error } = await supabase
-      .from('system_notifications')
+      .from('notifications')
       .insert({
         title: params.title,
         message: params.message,

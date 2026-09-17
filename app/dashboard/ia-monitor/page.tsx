@@ -502,10 +502,7 @@ export default function AIMonitorPage() {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 border-blue-300 dark:border-blue-700">
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  LLM Clínico
-                </Badge>
+
               </div>
             </CardHeader>
 
@@ -549,7 +546,7 @@ export default function AIMonitorPage() {
 
             <CardFooter className="pt-2 border-t border-gray-100 dark:border-slate-800/80 flex items-center justify-between">
               <span className="text-xs text-gray-500 dark:text-slate-400">
-                Endpoint: <code className="text-blue-600 dark:text-blue-400 font-mono">POST /api/ai/appointment-reminders</code>
+
               </span>
               <Button
                 onClick={handleExecuteReminders}
@@ -582,17 +579,14 @@ export default function AIMonitorPage() {
                   </div>
                   <div>
                     <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
-                      Agente de Stock Predictivo & Run-Rate
+                      Agente de Stock Predictivo
                     </CardTitle>
                     <CardDescription className="text-xs text-gray-600 dark:text-slate-400">
                       Detección temprana de quiebre de stock sobre libro mayor inmutable
                     </CardDescription>
                   </div>
                 </div>
-                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border-amber-300 dark:border-amber-700">
-                  <TrendingDown className="h-3 w-3 mr-1" />
-                  Event-Driven
-                </Badge>
+
               </div>
             </CardHeader>
 
@@ -637,7 +631,7 @@ export default function AIMonitorPage() {
 
             <CardFooter className="pt-2 border-t border-gray-100 dark:border-slate-800/80 flex items-center justify-between">
               <span className="text-xs text-gray-500 dark:text-slate-400">
-                Endpoint: <code className="text-amber-600 dark:text-amber-400 font-mono">POST /api/ai/predictive-stock</code>
+
               </span>
               <Button
                 onClick={handleExecuteStockAudit}
@@ -647,7 +641,7 @@ export default function AIMonitorPage() {
                 {isExecutingStock ? (
                   <>
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    <span>Calculando Run-Rate...</span>
+                    <span>Calculando...</span>
                   </>
                 ) : (
                   <>
@@ -669,7 +663,7 @@ export default function AIMonitorPage() {
               <CardTitle className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <span>Bitácora de Auditoría en Tiempo Real</span>
                 <Badge variant="outline" className="font-mono text-xs">
-                  notifications ({logs.length})
+                  Notificaciones IA ({logs.length})
                 </Badge>
               </CardTitle>
               <CardDescription className="text-xs text-gray-600 dark:text-slate-400">
