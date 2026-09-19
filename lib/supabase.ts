@@ -114,6 +114,7 @@ export interface Appointment {
   patients?: Patient
   vaccines?: Vaccine
   nurses?: Nurse
+  vacuna?: Partial<Vaccine>
 }
 
 export interface VaccinationRecord {

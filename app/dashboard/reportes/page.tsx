@@ -27,7 +27,21 @@ import {
 
 
 export default function ReportsPage() {
-  const [period, setPeriod] = useState("2025", "2026", "2027")
+  const currentYear = new Date().getFullYear()
+  const availableYears = Array.from(
+    new Set([
+      (currentYear - 2).toString(),
+      (currentYear - 1).toString(),
+      currentYear.toString(),
+      (currentYear + 1).toString(),
+      "2024",
+      "2025",
+      "2026",
+      "2027"
+    ])
+  ).sort()
+
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
   const [chartData, setChartData] = useState([])
   const [distributionData, setDistributionData] = useState([])
   const [trendData, setTrendData] = useState([])
@@ -214,8 +228,8 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    loadChartData(period)
-  }, [period])
+    loadChartData(selectedYear)
+  }, [selectedYear])
   
   // NUEVO: Carga los datos de enfermeros cuando la pestaña cambia a 'nurses'
   useEffect(() => {
@@ -263,14 +277,16 @@ export default function ReportsPage() {
                   <CardDescription>Cantidad de vacunas aplicadas por período</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select value={period} onValueChange={setPeriod}>
+                  <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Período" />
+                      <SelectValue placeholder="Año" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                      <SelectItem value="2027">2027</SelectItem>
+                      {availableYears.map((year) => (
+                        <SelectItem key={year} value={year}>
+                          {year}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

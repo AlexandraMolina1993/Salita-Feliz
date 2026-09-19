@@ -275,7 +275,7 @@ export default function VacunasPage() {
         </Card>
 
         <Card
-          className="modern-card gradient-secondary text-white clickable-card"
+          className="modern-card bg-gradient-to-r from-amber-400 to-orange-500 text-white clickable-card"
           onClick={() => openModal("expiringSoon")}
         >
           <CardContent className="pt-6">
@@ -399,13 +399,12 @@ export default function VacunasPage() {
                       <span className="text-slate-500">Vencimiento:</span>
                       <span
                         suppressHydrationWarning
-                        className={`font-semibold ${
-                          isExpired(vaccine.expiration_date)
-                            ? "text-red-600"
-                            : isExpiringSoon(vaccine.expiration_date)
-                              ? "text-yellow-600"
-                              : "text-green-700"
-                        }`}
+                        className={`font-semibold ${isExpired(vaccine.expiration_date)
+                          ? "text-red-600"
+                          : isExpiringSoon(vaccine.expiration_date)
+                            ? "text-yellow-600"
+                            : "text-green-700"
+                          }`}
                       >
                         {formatNominalDate(vaccine.expiration_date)}
                       </span>

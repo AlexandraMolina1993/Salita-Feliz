@@ -10,12 +10,14 @@ import Link from "next/link"
 import { getPatientById, activatePatient, deletePatient, getAppointmentsByPatientId } from "@/lib/database"
 import type { Patient, Appointment } from "@/lib/database"
 import { formatNominalDate } from "@/lib/dateUtils"
+import { VaccineHistoryModal } from "@/components/VaccineHistoryModal"
 
 export default function PatientDetailPage() {
   const params = useParams()
   const router = useRouter()
   const [patient, setPatient] = useState<Patient | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [selectedVaccination, setSelectedVaccination] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -330,16 +332,40 @@ export default function PatientDetailPage() {
     {appointments.length > 0 ? (
       <div className="space-y-4">
         {appointments.map((appointment) => (
-          <div key={appointment.id} className="border rounded-lg p-4 bg-gray-50 space-y-2">
-            {/* CORREGIDO: Usar el alias 'vacuna' y los campos 'name' y 'manufacturer' */}
-            <p className="font-semibold text-lg">
-              Vacuna: {appointment.vacuna?.name}
-              {appointment.vacuna?.manufacturer && ` - ${appointment.vacuna.manufacturer}`}
-            </p>
-            <div className="flex items-center text-sm text-gray-600">
-              <Calendar className="h-4 w-4 mr-2" />
-              <span suppressHydrationWarning>
-                {formatNominalDate(appointment.appointment_date)}
+          <div
+            key={appointment.id}
+            onClick={() => setSelectedVaccination(appointment)}
+            className="border rounded-lg p-4 bg-gray-50 space-y-2 cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold text-lg group-hover:text-primary transition-colors">
+                Vacuna: {appointment.vacuna?.name || appointment.vaccines?.name}
+                {(appointment.vacuna?.manufacturer || appointment.vaccines?.manufacturer) &&
+                  ` - ${appointment.vacuna?.manufacturer || appointment.vaccines?.manufacturer}`}
+              </p>
+              {appointment.status === "completed" ? (
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs shrink-0">
+                  Aplicada
+                </Badge>
+              ) : appointment.status === "cancelled" ? (
+                <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-300 text-xs shrink-0">
+                  Cancelada
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs shrink-0">
+                  Programada
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+                <span suppressHydrationWarning>
+                  {formatNominalDate(appointment.appointment_date)}
+                </span>
+              </div>
+              <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                Ver detalles &rarr;
               </span>
             </div>
             {appointment.notes && (
@@ -369,6 +395,17 @@ export default function PatientDetailPage() {
     )}
   </CardContent>
 </Card>
+
+    {/* Modal de Detalles del Historial de Vacunas */}
+    <VaccineHistoryModal
+      open={!!selectedVaccination}
+      onOpenChange={(open) => {
+        if (!open) {
+          setSelectedVaccination(null)
+        }
+      }}
+      vaccination={selectedVaccination}
+    />
       </div>
     </div>
   )

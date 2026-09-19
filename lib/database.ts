@@ -1391,7 +1391,9 @@ export async function getAppointmentsByPatientId(patientId: string): Promise<App
     .select(
       `
       *,
-      vacuna:vaccine_id(name, manufacturer)
+      vacuna:vaccine_id(*),
+      vaccines:vaccine_id(*),
+      nurses:nurse_id(*)
       `
     )
     .eq("patient_id", patientId)

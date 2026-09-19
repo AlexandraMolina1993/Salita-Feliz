@@ -13,6 +13,7 @@ import Link from "next/link"
 import { getAppointments, type Appointment } from "@/lib/database"
 import { cancelAppointmentAction, deleteAppointmentAction } from "@/app/actions/appointments"
 import { CompleteAppointmentDialog } from "@/components/complete-appointment-dialog"
+import { TurnoDetailsModal } from "@/components/TurnoDetailsModal"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +35,8 @@ export default function TurnosPage() {
   const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false)
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [detailsAppointment, setDetailsAppointment] = useState<Appointment | null>(null)
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -60,6 +63,11 @@ export default function TurnosPage() {
   const handleOpenCompleteDialog = (appointment: any) => {
     setSelectedAppointment(appointment)
     setIsCompleteDialogOpen(true)
+  }
+
+  const handleOpenDetailsModal = (appointment: Appointment) => {
+    setDetailsAppointment(appointment)
+    setIsDetailsModalOpen(true)
   }
 
   const handleOpenDeleteDialog = (appointment: Appointment) => {
@@ -191,7 +199,8 @@ export default function TurnosPage() {
         {filteredAppointments.map((appointment, index) => (
           <Card
             key={appointment.id}
-            className="modern-card hover:shadow-2xl transition-all duration-300"
+            onClick={() => handleOpenDetailsModal(appointment)}
+            className="modern-card cursor-pointer hover:shadow-md hover:border-primary/50 transition-all duration-300"
             style={{ animationDelay: `${index * 0.1}s` }}
           >
             <CardHeader className="pb-3 flex-row justify-between items-start">
@@ -221,13 +230,19 @@ export default function TurnosPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-4 border-t">
+              <div
+                className="flex flex-wrap gap-2 pt-4 border-t"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {appointment.status === 'scheduled' && (
                   <>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleOpenCompleteDialog(appointment)} 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenCompleteDialog(appointment)
+                      }} 
                       className="flex-1 hover:bg-emerald-50 hover:border-emerald-300 text-emerald-600 font-semibold"
                     >
                       <CheckCircle className="h-4 w-4 mr-1" />
@@ -236,7 +251,10 @@ export default function TurnosPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleCancelAppointment(appointment)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCancelAppointment(appointment)
+                      }}
                       className="flex-1 hover:bg-rose-50 hover:border-rose-300 text-rose-600"
                     >
                       <XCircle className="h-4 w-4 mr-1" />
@@ -244,11 +262,16 @@ export default function TurnosPage() {
                     </Button>
                   </>
                 )}
-                <Link href={`/dashboard/turnos/${appointment.id}/editar`} className="flex-1">
+                <Link
+                  href={`/dashboard/turnos/${appointment.id}/editar`}
+                  className="flex-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full hover:bg-yellow-50 hover:border-yellow-300 text-yellow-600 bg-transparent"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     Editar
                   </Button>
@@ -256,7 +279,10 @@ export default function TurnosPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleOpenDeleteDialog(appointment)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleOpenDeleteDialog(appointment)
+                  }}
                   className="hover:bg-red-50 hover:border-red-300 text-red-600 hover:text-red-700 px-3"
                   title="Eliminar turno"
                 >
@@ -286,6 +312,13 @@ export default function TurnosPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Detalles Exhaustivos del Turno */}
+      <TurnoDetailsModal
+        open={isDetailsModalOpen}
+        onOpenChange={setIsDetailsModalOpen}
+        turno={detailsAppointment}
+      />
 
       {/* Modal de Finalización y Descuento Atómico de Stock */}
       <CompleteAppointmentDialog

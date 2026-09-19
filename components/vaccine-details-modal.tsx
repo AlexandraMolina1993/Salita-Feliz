@@ -134,13 +134,12 @@ export function VaccineDetailsModal({ vaccines, isOpen, onClose, title, descript
                           <span className="text-gray-600">Vence:</span>
                           <span
                             suppressHydrationWarning
-                            className={`text-xs font-medium ${
-                              isExpired(vaccine.expiration_date)
+                            className={`text-xs font-medium ${isExpired(vaccine.expiration_date)
                                 ? "text-red-600"
                                 : isExpiringSoon(vaccine.expiration_date)
                                   ? "text-yellow-600"
                                   : "text-green-600"
-                            }`}
+                              }`}
                           >
                             {formatNominalDate(vaccine.expiration_date)}
                           </span>
