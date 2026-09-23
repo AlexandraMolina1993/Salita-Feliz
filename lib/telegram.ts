@@ -1,7 +1,10 @@
 /**
  * Envía una alerta operativa inmediata al grupo o usuario de Telegram configurado.
  */
-export async function sendTelegramAlert(message: string) {
+export async function sendTelegramAlert(
+    message: string,
+    parseMode: 'HTML' | 'Markdown' = 'HTML'
+) {
     try {
         // Leemos de las variables de entorno (Recomendado por seguridad)
         // Si no existen, usamos las que tenías hardcodeadas como plan B.
@@ -10,14 +13,19 @@ export async function sendTelegramAlert(message: string) {
 
         const telegramUrl = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
 
+        // Si el mensaje contiene etiquetas HTML (como <b>, <i>, <code>) usamos HTML por defecto,
+        // o respetamos Markdown si el mensaje fue formateado con asteriscos sin tags HTML.
+        const effectiveParseMode = parseMode === 'Markdown' && !/<[a-z][\s\S]*>/i.test(message)
+            ? 'Markdown'
+            : 'HTML';
+
         const response = await fetch(telegramUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 chat_id: telegramChatId,
                 text: message,
-                // Usamos Markdown porque el agente envía el texto con asteriscos para las negritas
-                parse_mode: "Markdown",
+                parse_mode: effectiveParseMode,
             }),
         });
 

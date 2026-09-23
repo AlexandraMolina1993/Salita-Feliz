@@ -17,7 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -61,6 +64,7 @@ import { supabase } from '@/lib/supabase';
 import type { AINotificationRecord } from '@/types/vaccine';
 import type { AppointmentRemindersBatchReport } from '@/types/appointmentReminder';
 import type { PredictiveStockReport } from '@/types/vaccine';
+import type { PreventiveCalendarReport } from '@/types/preventiveCalendar';
 import { formatUnifiedHistoryDate } from '@/lib/dateUtils';
 
 export default function AIMonitorPage() {
@@ -100,6 +104,13 @@ export default function AIMonitorPage() {
   const [stockForceAlert, setStockForceAlert] = useState(false);
   const [stockReport, setStockReport] = useState<PredictiveStockReport | null>(null);
   const [isStockReportOpen, setIsStockReportOpen] = useState(false);
+
+  // Estados para Agente de Calendario Preventivo
+  const [isExecutingCalendar, setIsExecutingCalendar] = useState(false);
+  const [calendarMilestoneAge, setCalendarMilestoneAge] = useState<string>('ALL');
+  const [calendarForceResend, setCalendarForceResend] = useState(false);
+  const [calendarReport, setCalendarReport] = useState<PreventiveCalendarReport | null>(null);
+  const [isCalendarReportOpen, setIsCalendarReportOpen] = useState(false);
 
   // Estados para Modal de Detalle de Log
   const [selectedLog, setSelectedLog] = useState<AINotificationRecord | null>(null);
@@ -259,6 +270,52 @@ export default function AIMonitorPage() {
       });
     } finally {
       setIsExecutingStock(false);
+    }
+  };
+
+  // Disparador Manual: Agente de Calendario Preventivo
+  const handleExecuteCalendarAudit = async () => {
+    try {
+      setIsExecutingCalendar(true);
+      toast({
+        title: '🗓️ Ejecutando Agente de Calendario Preventivo...',
+        description: 'Escaneando fechas de nacimiento y evaluando hitos del Calendario Nacional de Vacunación.',
+      });
+
+      const res = await fetch('/api/cron/calendario-preventivo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          forceResend: calendarForceResend,
+          milestoneKey: calendarMilestoneAge === 'ALL' ? undefined : calendarMilestoneAge,
+          milestoneAge: calendarMilestoneAge === 'ALL' ? undefined : calendarMilestoneAge,
+          notifyEmail: true,
+          notifyTelegram: true,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.success && json.report) {
+        setCalendarReport(json.report);
+        setIsCalendarReportOpen(true);
+        toast({
+          title: '✅ Auditoría de Calendario Completada',
+          description: `Analizados: ${json.report.totalActivePatientsChecked} pacientes. Hitos: ${json.report.eligibleCandidatesCount}. Enviados: ${json.report.notificationsSentCount}.`,
+        });
+        fetchLogs(true);
+      } else {
+        throw new Error(json.error || 'Error al ejecutar agente de calendario preventivo.');
+      }
+    } catch (err: any) {
+      console.error('Error al ejecutar calendario preventivo:', err);
+      toast({
+        title: '❌ Error en Agente de Calendario',
+        description: err.message || 'Error inesperado durante la ejecución.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExecutingCalendar(false);
     }
   };
 
@@ -483,7 +540,7 @@ export default function AIMonitorPage() {
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Tarjeta Disparador 1: Agente Recordatorios */}
           <Card className="border-blue-200/80 dark:border-blue-900/50 shadow-md relative overflow-hidden bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/30 dark:from-slate-950 dark:via-blue-950/10 dark:to-slate-900">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
@@ -647,6 +704,118 @@ export default function AIMonitorPage() {
                   <>
                     <Activity className="h-3.5 w-3.5" />
                     <span>Ejecutar Auditoría de Stock IA</span>
+                  </>
+                )}
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Tarjeta Disparador 3: Agente de Calendario Preventivo */}
+          <Card className="border-teal-200/80 dark:border-teal-900/50 shadow-md relative overflow-hidden bg-gradient-to-br from-white via-teal-50/20 to-emerald-50/30 dark:from-slate-950 dark:via-teal-950/10 dark:to-slate-900">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full blur-2xl pointer-events-none" />
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-teal-600 text-white shadow-sm">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
+                      Agente de Calendario Preventivo
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-600 dark:text-slate-400">
+                      Detección proactiva de hitos y esquema nacional por edad
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4 text-sm">
+              <p className="text-xs text-gray-600 dark:text-slate-300">
+                Escanea las fechas de nacimiento de los pacientes para detectar hitos del calendario nacional (ej. 11 años, 65 años) y despacha invitaciones de vacunación.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-gray-700 dark:text-slate-300">
+                    Filtro de Hitos
+                  </Label>
+                  <Select
+                    value={calendarMilestoneAge}
+                    onValueChange={setCalendarMilestoneAge}
+                  >
+                    <SelectTrigger className="h-8 text-xs border-gray-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900">
+                      <SelectValue placeholder="Hitos" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      <SelectItem value="ALL">🌟 Todos los Hitos del Calendario</SelectItem>
+                      
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-[11px] font-bold text-teal-700 dark:text-teal-400">
+                          👶 Hitos Pediátricos (Meses)
+                        </SelectLabel>
+                        <SelectItem value="NEWBORN">Recién Nacido (0 meses - BCG / Hep B)</SelectItem>
+                        <SelectItem value="2_MONTHS">2 Meses (Rotavirus / Quíntuple / IPV / Neumo)</SelectItem>
+                        <SelectItem value="3_MONTHS">3 Meses (Meningococo)</SelectItem>
+                        <SelectItem value="4_MONTHS">4 Meses (Rotavirus / Quíntuple / IPV / Neumo)</SelectItem>
+                        <SelectItem value="6_MONTHS">6 Meses (Quíntuple / IPV)</SelectItem>
+                        <SelectItem value="12_MONTHS">12 Meses (1 año - SRP / Hep A / Neumo)</SelectItem>
+                        <SelectItem value="15_MONTHS">15 Meses (Meningococo / Varicela)</SelectItem>
+                        <SelectItem value="18_MONTHS">18 Meses (Quíntuple / IPV)</SelectItem>
+                      </SelectGroup>
+
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">
+                          🎒 Hitos Escolares y Adolescentes
+                        </SelectLabel>
+                        <SelectItem value="5_YEARS">5 Años (Ingreso Escolar - IPV / SRP / DTP / Varicela)</SelectItem>
+                        <SelectItem value="11_YEARS">11 Años (Adolescente - VPH / dTpa / MenACWY)</SelectItem>
+                      </SelectGroup>
+
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                          🧑 Hitos Adultos
+                        </SelectLabel>
+                        <SelectItem value="ADULT_10Y">Adultos (Refuerzo 10 años - dT / Hep B)</SelectItem>
+                        <SelectItem value="65_YEARS">65 Años (Adulto Mayor - Antigripal / Neumo / dT)</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center space-x-2 pt-4">
+                  <Switch
+                    id="force-calendar-resend"
+                    checked={calendarForceResend}
+                    onCheckedChange={setCalendarForceResend}
+                  />
+                  <Label htmlFor="force-calendar-resend" className="text-xs text-gray-700 dark:text-slate-300 cursor-pointer">
+                    Forzar reenvío
+                  </Label>
+                </div>
+              </div>
+            </CardContent>
+
+            <CardFooter className="pt-2 border-t border-gray-100 dark:border-slate-800/80 flex items-center justify-between">
+              <span className="text-xs text-gray-500 dark:text-slate-400"></span>
+              <Button
+                onClick={handleExecuteCalendarAudit}
+                disabled={isExecutingCalendar}
+                className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-500/20 text-xs font-semibold gap-2"
+              >
+                {isExecutingCalendar ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Auditando...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span>Ejecutar Auditoría de Calendario</span>
                   </>
                 )}
               </Button>
@@ -1202,6 +1371,117 @@ export default function AIMonitorPage() {
               className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
             >
               Cerrar Reporte
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 8. Modal de Resultados de Agente de Calendario Preventivo */}
+      <Dialog open={isCalendarReportOpen} onOpenChange={setIsCalendarReportOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800">
+          <DialogHeader className="p-5 border-b border-gray-100 dark:border-slate-800 bg-teal-50/50 dark:bg-teal-950/20">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-teal-600 text-white">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-gray-900 dark:text-white">
+                  Reporte de Auditoría: Calendario Preventivo
+                </DialogTitle>
+                <DialogDescription className="text-xs text-gray-500 dark:text-slate-400">
+                  Detección de hitos de vacunación y despacho preventivo
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {calendarReport && (
+            <div className="flex-1 p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-800">
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Total Auditados</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
+                    {calendarReport.totalActivePatientsChecked}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
+                  <p className="text-xs text-teal-600 dark:text-teal-400">Hitos Detectados</p>
+                  <p className="text-xl font-bold text-teal-600 dark:text-teal-400 mt-1">
+                    {calendarReport.eligibleCandidatesCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Enviadas</p>
+                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                    {calendarReport.notificationsSentCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Omitidos / Recientes</p>
+                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                    {calendarReport.alreadyNotifiedCount}
+                  </p>
+                </div>
+              </div>
+
+              {/* Detalle por Paciente Candidato */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase">
+                  Pacientes Alcanzados por Hitos de Vacunación
+                </h4>
+                {calendarReport.results.length === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-slate-400 py-4 text-center">
+                    No se detectaron pacientes activos que alcancen edades clave en el mes evaluado ({calendarReport.targetMonth}/{calendarReport.targetYear}).
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {calendarReport.results.map((r) => (
+                      <div
+                        key={r.candidate.patientId}
+                        className="p-3 rounded-lg border border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-gray-900 dark:text-white">
+                            {r.candidate.fullName} <span className="font-normal text-teal-600 dark:text-teal-400">• {r.candidate.ageDisplay || `${r.candidate.currentAgeYears} años`}</span>
+                          </p>
+                          <p className="text-gray-600 dark:text-slate-300 text-[11px]">
+                            {r.candidate.milestone.title}: {r.candidate.milestone.vaccines.map((v) => v.name).join(', ')}
+                          </p>
+                          <p className="text-gray-400 text-[10px]">
+                            DNI: {r.candidate.dni} • Nacimiento: {r.candidate.birthDate} • Email: {r.candidate.email || 'Sin email'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end md:self-center">
+                          {r.channels.telegram.attempted && (
+                            <Badge variant="outline" className={r.channels.telegram.success ? 'text-sky-600 border-sky-300' : 'text-rose-600 border-rose-300'}>
+                              Telegram: {r.channels.telegram.success ? 'OK' : 'Error'}
+                            </Badge>
+                          )}
+                          {r.channels.email.attempted && (
+                            <Badge variant="outline" className={r.channels.email.success ? 'text-emerald-600 border-emerald-300' : 'text-rose-600 border-rose-300'}>
+                              Email: {r.channels.email.success ? 'OK' : 'Error'}
+                            </Badge>
+                          )}
+                          <Badge className={r.status === 'SENT' ? 'bg-emerald-600 text-white' : r.status === 'SKIPPED' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'}>
+                            {r.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="p-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50">
+            <Button
+              size="sm"
+              onClick={() => setIsCalendarReportOpen(false)}
+              className="text-xs bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              Entendido
             </Button>
           </DialogFooter>
         </DialogContent>
