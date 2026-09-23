@@ -12,7 +12,7 @@ import {
 } from "./supabase";
 import { getArgentinaTodayDateString, formatDateToISO } from "./dateUtils";
 
-export { supabase, type Appointment };
+export { supabase, type Appointment, type Patient, type Nurse };
 
 export async function getUpcomingVaccinations() {
   return getAppointments();

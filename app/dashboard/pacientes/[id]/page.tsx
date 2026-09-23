@@ -5,12 +5,13 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit, Calendar, Phone, Mail, MapPin, Heart, User, Shield } from "lucide-react"
+import { ArrowLeft, Edit, Calendar, Phone, Mail, MapPin, Heart, User, Shield, QrCode } from "lucide-react"
 import Link from "next/link"
 import { getPatientById, activatePatient, deletePatient, getAppointmentsByPatientId } from "@/lib/database"
 import type { Patient, Appointment } from "@/lib/database"
 import { formatNominalDate } from "@/lib/dateUtils"
 import { VaccineHistoryModal } from "@/components/VaccineHistoryModal"
+import { CarnetDigitalModal } from "@/components/CarnetDigitalModal"
 
 export default function PatientDetailPage() {
   const params = useParams()
@@ -18,6 +19,7 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [selectedVaccination, setSelectedVaccination] = useState<Appointment | null>(null)
+  const [showCarnetModal, setShowCarnetModal] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -107,12 +109,22 @@ export default function PatientDetailPage() {
             <p className="text-muted-foreground">Información detallada del paciente</p>
           </div>
         </div>
-        <Link href={`/dashboard/pacientes/${patient.id}/editar`}>
-          <Button className="modern-button">
-            <Edit className="mr-2 h-4 w-4" />
-            Editar Paciente
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setShowCarnetModal(true)}
+            className="border-primary/40 text-primary hover:bg-primary/10 flex items-center gap-2 shadow-sm font-medium"
+          >
+            <QrCode className="h-4 w-4" />
+            Exportar Carnet Digital
           </Button>
-        </Link>
+          <Link href={`/dashboard/pacientes/${patient.id}/editar`}>
+            <Button className="modern-button">
+              <Edit className="mr-2 h-4 w-4" />
+              Editar Paciente
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
@@ -322,11 +334,22 @@ export default function PatientDetailPage() {
 
       {/* Historial de Vacunas */}
 <Card className="modern-card">
-  <CardHeader>
+  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
     <CardTitle className="flex items-center gap-2">
       <Calendar className="h-5 w-5 text-orange-600" />
       Historial de Vacunas
     </CardTitle>
+    {appointments.some((a) => a.status === "completed") && (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowCarnetModal(true)}
+        className="text-xs text-primary hover:text-primary/80 flex items-center gap-1.5 h-8 px-2"
+      >
+        <QrCode className="h-3.5 w-3.5" />
+        Ver Carnet
+      </Button>
+    )}
   </CardHeader>
   <CardContent>
     {appointments.length > 0 ? (
@@ -405,6 +428,14 @@ export default function PatientDetailPage() {
         }
       }}
       vaccination={selectedVaccination}
+    />
+
+    {/* Modal de Carnet Digital Validado con Código QR */}
+    <CarnetDigitalModal
+      open={showCarnetModal}
+      onOpenChange={setShowCarnetModal}
+      patient={patient}
+      appointments={appointments}
     />
       </div>
     </div>
