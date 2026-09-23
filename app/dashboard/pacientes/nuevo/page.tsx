@@ -22,13 +22,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { ArrowLeft, Save } from "lucide-react"
-import { createPatient, type Patient } from "@/lib/database"
+import type { Patient } from "@/lib/supabase"
+import { createPatientAction } from "@/app/actions/patients"
 
 export default function NewPatientPage() {
   const router = useRouter()
-  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
 
   // Estados para los selects controlados
@@ -58,22 +58,20 @@ export default function NewPatientPage() {
       insurance_number: formData.get("insurance-number") as string,
       notes: formData.get("notes") as string,
     }
-console.log("Obra social ingresada:", formData.get("health-insurance"))
-console.log("Paciente que se va a guardar:", patientData)
 
     try {
-      await createPatient(patientData)
-      toast({
-        title: "Paciente registrado",
-        description: "El paciente ha sido registrado correctamente",
-      })
+      const result = await createPatientAction(patientData)
+
+      if (!result.success) {
+        toast.error(result.error || "No se pudo registrar el paciente")
+        return
+      }
+
+      toast.success("Paciente registrado correctamente")
       router.push("/dashboard/pacientes")
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo registrar el paciente",
-        variant: "destructive",
-      })
+      console.error("Error al registrar paciente:", error)
+      toast.error("Ocurrió un error inesperado al registrar el paciente")
     } finally {
       setIsLoading(false)
     }

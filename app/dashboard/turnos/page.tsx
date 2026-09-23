@@ -260,22 +260,22 @@ export default function TurnosPage() {
                       <XCircle className="h-4 w-4 mr-1" />
                       Cancelar
                     </Button>
+                    <Link
+                      href={`/dashboard/turnos/${appointment.id}/editar`}
+                      className="flex-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full hover:bg-yellow-50 hover:border-yellow-300 text-yellow-600 bg-transparent"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Editar
+                      </Button>
+                    </Link>
                   </>
                 )}
-                <Link
-                  href={`/dashboard/turnos/${appointment.id}/editar`}
-                  className="flex-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full hover:bg-yellow-50 hover:border-yellow-300 text-yellow-600 bg-transparent"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Editar
-                  </Button>
-                </Link>
                 <Button
                   variant="outline"
                   size="sm"

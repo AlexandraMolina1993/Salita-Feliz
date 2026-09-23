@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
-import { getPatientById, updatePatient, type Patient } from "@/lib/database"
+import { getPatientById, type Patient } from "@/lib/database"
+import { updatePatientAction } from "@/app/actions/patients"
 
 function formatLocalDate(dateStr: string) {
   const date = new Date(dateStr)
@@ -24,7 +25,6 @@ function formatLocalDate(dateStr: string) {
 export default function EditPatientPage() {
   const router = useRouter()
   const params = useParams()
-  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -40,11 +40,7 @@ export default function EditPatientPage() {
       const data = await getPatientById(id)
       setPatient(data)
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo cargar el paciente",
-        variant: "destructive",
-      })
+      toast.error("No se pudo cargar el paciente")
       router.push("/dashboard/pacientes")
     } finally {
       setLoading(false)
@@ -76,18 +72,18 @@ export default function EditPatientPage() {
     }
 
     try {
-      await updatePatient(params.id as string, patientData)
-      toast({
-        title: "Paciente actualizado",
-        description: "Los datos del paciente han sido actualizados correctamente",
-      })
+      const result = await updatePatientAction(params.id as string, patientData)
+
+      if (!result.success) {
+        toast.error(result.error || "No se pudo actualizar el paciente")
+        return
+      }
+
+      toast.success("Paciente actualizado correctamente")
       router.push("/dashboard/pacientes")
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo actualizar el paciente",
-        variant: "destructive",
-      })
+      console.error("Error al actualizar paciente:", error)
+      toast.error("Ocurrió un error inesperado al actualizar el paciente")
     } finally {
       setIsLoading(false)
     }

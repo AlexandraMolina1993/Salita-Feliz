@@ -146,12 +146,14 @@ export default function AppointmentDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href={`/dashboard/turnos/${appointment.id}/editar`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Link>
-          </Button>
+          {appointment.status === "scheduled" && (
+            <Button asChild variant="outline">
+              <Link href={`/dashboard/turnos/${appointment.id}/editar`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
+          )}
           {appointment.status === "scheduled" && (
             <Button onClick={() => handleStatusChange("completed")} className="medical-gradient">
               <CheckCircle className="mr-2 h-4 w-4" />
@@ -334,12 +336,14 @@ export default function AppointmentDetailPage() {
                 </>
               )}
 
-              <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-                <Link href={`/dashboard/turnos/${appointment.id}/editar`}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Editar Turno
-                </Link>
-              </Button>
+              {appointment.status === "scheduled" && (
+                <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
+                  <Link href={`/dashboard/turnos/${appointment.id}/editar`}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Editar Turno
+                  </Link>
+                </Button>
+              )}
 
               <Button variant="outline" className="w-full justify-start bg-transparent">
                 <FileText className="mr-2 h-4 w-4" />

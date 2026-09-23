@@ -58,6 +58,20 @@ export default function EditAppointmentPage() {
         getVaccinesStockAction(),
       ])
 
+      if (!appointmentData) {
+        throw new Error("No se encontró el turno")
+      }
+
+      if (appointmentData.status === "completed" || appointmentData.status === "cancelled") {
+        toast({
+          title: "Acceso denegado",
+          description: "No se puede editar un turno que ya ha finalizado.",
+          variant: "destructive",
+        })
+        router.push("/dashboard/turnos")
+        return
+      }
+
       setAppointment(appointmentData)
       setPatients(patientsData)
       setNurses(nursesData.filter((n) => n.is_active))

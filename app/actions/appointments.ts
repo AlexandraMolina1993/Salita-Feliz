@@ -408,7 +408,16 @@ export async function updateAppointmentAction(
       };
     }
 
-    // 2. Si se cambia de vacuna, validar que la nueva no esté vencida ni sin stock
+    // 2. Bloquear edición de turnos históricos (finalizados o cancelados)
+    if (currentAppointment.status === 'completed' || currentAppointment.status === 'cancelled') {
+      return {
+        success: false,
+        error: 'No se puede editar un turno que ya ha finalizado.',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // 3. Si se cambia de vacuna, validar que la nueva no esté vencida ni sin stock
     if (input.vaccine_id && input.vaccine_id !== currentAppointment.vaccine_id) {
       const { data: newVaccineStock } = await supabase
         .from('v_vaccines_stock')

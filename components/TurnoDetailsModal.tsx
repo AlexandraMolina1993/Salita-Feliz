@@ -419,12 +419,14 @@ export function TurnoDetailsModal({
                     Ficha Completa
                   </Link>
                 </Button>
-                <Button asChild variant="outline" size="sm" className="flex-1 sm:flex-initial">
-                  <Link href={`/dashboard/turnos/${turno.id}/editar`}>
-                    <Edit className="h-4 w-4 mr-1.5" />
-                    Editar
-                  </Link>
-                </Button>
+                {turno.status === "scheduled" && (
+                  <Button asChild variant="outline" size="sm" className="flex-1 sm:flex-initial">
+                    <Link href={`/dashboard/turnos/${turno.id}/editar`}>
+                      <Edit className="h-4 w-4 mr-1.5" />
+                      Editar
+                    </Link>
+                  </Button>
+                )}
               </>
             )}
           </div>

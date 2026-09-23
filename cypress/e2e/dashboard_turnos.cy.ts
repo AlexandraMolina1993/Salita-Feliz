@@ -2,7 +2,7 @@ describe('Módulo del Vacunatorio - Asignación de Turnos por Admin', () => {
   
   beforeEach(() => {
     // Simular estado autenticado o loguearse previamente
-    cy.visit('/dashboard/turnos'); // O la ruta interna de gestión de turnos
+    cy.visit('/dashboard/turnos/nuevo'); // O la ruta interna de gestión de turnos
   });
 
   it('Debe permitir registrar un turno para una vacuna específica', () => {
