@@ -310,29 +310,184 @@ export async function getVaccinesByNurse() {
  * Obtiene un ranking de enfermeros por la cantidad de vacunas aplicadas.
  * @returns {Promise<Array<{ name: string, vaccines: number }>>}
  */
-export async function getNurseRankings() {
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, nurses!inner(full_name)')
-    .eq('status', 'completed');
+export interface NurseRankingItem {
+  name: string;
+  licenseNumber: string;
+  vaccines: number;
+  patients: number;
+}
 
-  if (error) {
-    console.error("Error fetching nurse rankings:", error);
-    return [];
-  }
+export async function getNurseRankings(): Promise<NurseRankingItem[]> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, patient_id, nurses!inner(id, full_name, license_number)')
+    .eq('status', 'completed');
 
-  const rankings = data.reduce((acc, record) => {
-    const nurseName = record.nurses?.full_name || 'Enfermero Desconocido';
-    acc[nurseName] = (acc[nurseName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  if (error) {
+    console.error("Error fetching nurse rankings:", error);
+    return [];
+  }
 
-  return Object.keys(rankings)
-    .map(name => ({
-      name,
-      vaccines: rankings[name]
-    }))
-    .sort((a, b) => b.vaccines - a.vaccines);
+  const rankings = (data || []).reduce((acc: any, record: any) => {
+    const nurse = Array.isArray(record.nurses) ? record.nurses[0] : record.nurses;
+    const nurseName = nurse?.full_name || 'Enfermero Desconocido';
+    const license = nurse?.license_number || 'S/M';
+    const key = `${nurseName}___${license}`;
+
+    if (!acc[key]) {
+      acc[key] = {
+        name: nurseName,
+        licenseNumber: license,
+        vaccines: 0,
+        patientIds: new Set<string>()
+      };
+    }
+    acc[key].vaccines += 1;
+    if (record.patient_id) {
+      acc[key].patientIds.add(record.patient_id);
+    }
+    return acc;
+  }, {});
+
+  return Object.values(rankings)
+    .map((item: any) => ({
+      name: item.name,
+      licenseNumber: item.licenseNumber,
+      vaccines: item.vaccines,
+      patients: item.patientIds.size
+    }))
+    .sort((a: any, b: any) => b.vaccines - a.vaccines);
+}
+
+export interface VaccineDetailedBreakdown {
+  name: string;
+  type: string;
+  monthly: number[];
+  total: number;
+}
+
+export async function getVaccinesDetailedBreakdownByMonth(year: number): Promise<VaccineDetailedBreakdown[]> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('appointment_date, vaccines!inner(name, type)')
+    .eq('status', 'completed')
+    .gte('appointment_date', `${year}-01-01`)
+    .lt('appointment_date', `${year + 1}-01-01`);
+
+  if (error) {
+    console.error('Error fetching detailed vaccine breakdown:', error);
+    return [];
+  }
+
+  const map: Record<string, VaccineDetailedBreakdown> = {};
+
+  (data || []).forEach((row: any) => {
+    const vac = Array.isArray(row.vaccines) ? row.vaccines[0] : row.vaccines;
+    const name = vac?.name || 'Desconocida';
+    const type = vac?.type || 'General';
+    const key = `${name}___${type}`;
+
+    if (!map[key]) {
+      map[key] = {
+        name,
+        type,
+        monthly: new Array(12).fill(0),
+        total: 0
+      };
+    }
+
+    const month = new Date(row.appointment_date).getMonth();
+    if (month >= 0 && month < 12) {
+      map[key].monthly[month] += 1;
+      map[key].total += 1;
+    }
+  });
+
+  return Object.values(map).sort((a, b) => b.total - a.total);
+}
+
+export interface PatientDemographicStats {
+  totalPatients: number;
+  ageStats: Array<{ group: string; count: number; percentage: string }>;
+  genderStats: Array<{ name: string; count: number; percentage: string }>;
+  crossStats: Array<{ group: string; female: number; male: number; other: number; total: number }>;
+}
+
+export async function getPatientDemographicStats(): Promise<PatientDemographicStats> {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('id, gender, birth_date');
+
+  if (error) {
+    console.error('Error fetching patient demographic stats:', error);
+    return {
+      totalPatients: 0,
+      ageStats: [],
+      genderStats: [],
+      crossStats: []
+    };
+  }
+
+  const patients = data || [];
+  const total = patients.length;
+
+  const ageGroups = {
+    pediatric: { label: '0 - 17 años (Población Pediátrica)', female: 0, male: 0, other: 0, total: 0 },
+    adult: { label: '18 - 64 años (Adultos Activos)', female: 0, male: 0, other: 0, total: 0 },
+    senior: { label: '65+ años (Adultos Mayores / Riesgo)', female: 0, male: 0, other: 0, total: 0 }
+  };
+
+  const genderCounts: Record<string, number> = {
+    'Femenino': 0,
+    'Masculino': 0,
+    'Otro': 0
+  };
+
+  patients.forEach((patient: any) => {
+    const age = calculateAge(patient.birth_date);
+    const rawGender = (patient.gender || '').toLowerCase().trim();
+    let normGender = 'Otro';
+    if (rawGender === 'female' || rawGender === 'femenino') normGender = 'Femenino';
+    else if (rawGender === 'male' || rawGender === 'masculino') normGender = 'Masculino';
+
+    genderCounts[normGender] = (genderCounts[normGender] || 0) + 1;
+
+    let groupKey: "pediatric" | "adult" | "senior" = "adult";
+    if (age <= 17) groupKey = "pediatric";
+    else if (age >= 65) groupKey = "senior";
+
+    ageGroups[groupKey].total += 1;
+    if (normGender === "Femenino") ageGroups[groupKey].female += 1;
+    else if (normGender === "Masculino") ageGroups[groupKey].male += 1;
+    else ageGroups[groupKey].other += 1;
+  });
+
+  const ageStats = Object.values(ageGroups).map(g => ({
+    group: g.label,
+    count: g.total,
+    percentage: total > 0 ? ((g.total / total) * 100).toFixed(1) : '0.0'
+  }));
+
+  const genderStats = Object.entries(genderCounts).map(([name, count]) => ({
+    name,
+    count,
+    percentage: total > 0 ? ((count / total) * 100).toFixed(1) : '0.0'
+  }));
+
+  const crossStats = Object.values(ageGroups).map(g => ({
+    group: g.label,
+    female: g.female,
+    male: g.male,
+    other: g.other,
+    total: g.total
+  }));
+
+  return {
+    totalPatients: total,
+    ageStats,
+    genderStats,
+    crossStats
+  };
 }
 
 /**

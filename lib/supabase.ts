@@ -194,6 +194,15 @@ export interface IncidentReport {
 export type IncidentType = 'damage' | 'cold_chain_failure' | 'stock_error' | 'other';
 export type IncidentStatus = 'new' | 'in_review' | 'resolved';
 
+export interface RegionalStatistic {
+  id: string;
+  province: string;
+  vaccine_key: string;
+  coverage_percentage: number;
+  source_period: string;
+  updated_at: string;
+}
+
 // ==========================================
 // 🌐 Supabase Database Schema Schema
 // ==========================================
@@ -338,6 +347,15 @@ export type Database = {
           created_at: string;
           sent_at: string | null;
         }>;
+        Relationships: [];
+      };
+      regional_statistics: {
+        Row: RegionalStatistic;
+        Insert: Omit<RegionalStatistic, 'id' | 'updated_at'> & {
+          id?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<RegionalStatistic, 'id'>>;
         Relationships: [];
       };
     };
