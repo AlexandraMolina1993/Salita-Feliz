@@ -50,7 +50,7 @@ export function LoginForm() {
     <Card className="modern-card">
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Iniciar Sesión</CardTitle>
-        <CardDescription className="text-center">Ingresa tu email y contraseña para acceder al sistema</CardDescription>
+        <CardDescription className="text-center">Ingresá tu email y contraseña para acceder al sistema</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">

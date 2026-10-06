@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Bot,
+  MoonIcon,
 } from "lucide-react"
 
 const navigation = [
@@ -51,7 +52,7 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Heart className="h-5 w-5 text-white" />
+                <Syringe className="h-5 w-5 text-white" />
               </div>
               <div>
                 <h1 className="text-lg font-bold gradient-text dark:from-blue-400 dark:to-purple-500">Salita Feliz</h1>

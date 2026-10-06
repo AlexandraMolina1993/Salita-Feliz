@@ -26,6 +26,7 @@ import {
     Sparkles,
     ShieldCheck,
     Droplet,
+    Building2,
 } from "lucide-react";
 import {
     getVaccineStatsById,
@@ -543,6 +544,14 @@ export default function VaccineDetailPage() {
                                     <div>
                                         <p className="text-xs font-semibold text-slate-400">Vía de Administración</p>
                                         <p className="text-sm font-bold text-slate-700">{(vaccine as any).administration_route || "Intramuscular (IM)"}</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center space-x-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                    <Building2 className="h-4 w-4 text-slate-400" />
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-400">Proveedor/Organismo</p>
+                                        <p className="text-sm font-bold text-slate-700">{vaccine.supplier || "Desconocido"}</p>
                                     </div>
                                 </div>
 

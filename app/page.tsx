@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Heart, Shield, Users, Calendar, ArrowRight, CheckCircle } from "lucide-react"
+import { SyringeIcon, Shield, Users, Calendar, ArrowRight, CheckCircle, User2Icon, UsersIcon, UserIcon,} from "lucide-react"
 
 export default function HomePage() {
   return (
@@ -11,11 +11,11 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Heart className="h-6 w-6 text-white" />
+              <SyringeIcon className="h-6 w-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold gradient-text">Salita Feliz</h1>
-              <p className="text-sm text-gray-600">Sistema de Gestión</p>
+            
             </div>
           </div>
           <Link href="/login">
@@ -75,7 +75,7 @@ export default function HomePage() {
             <Card className="modern-card card-hover">
               <CardHeader className="text-center">
                 <div className="w-16 h-16 bg-gradient-success rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Shield className="h-8 w-8 text-blue-500" />
+                  <SyringeIcon className="h-8 w-8 text-blue-500" />
                 </div>
                 <CardTitle className="text-xl">Control de Vacunas</CardTitle>
               </CardHeader>
@@ -103,7 +103,7 @@ export default function HomePage() {
             <Card className="modern-card card-hover">
               <CardHeader className="text-center">
                 <div className="w-16 h-16 bg-gradient-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Heart className="h-8 w-8 text-blue-500" />
+                  <UserIcon className="h-8 w-8 text-blue-500" />
                 </div>
                 <CardTitle className="text-xl">Personal De Enfermería</CardTitle>
               </CardHeader>
@@ -214,7 +214,7 @@ export default function HomePage() {
             <div>
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Heart className="h-5 w-5 text-white" />
+                  <SyringeIcon className="h-5 w-5 text-white" />
                 </div>
                 <span className="text-xl font-bold">Salita Feliz</span>
               </div>
